@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/Root/" Id="02ea681e-c7d8-13c7-8484-4ac65e1b71e8">
+    <File Path=".gitignore" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="Updatum.FakeApp/Updatum.FakeApp.csproj" Id="766dd272-0dc1-48f4-83de-3a61aa2fb988" />
+  <Project Path="Updatum/Updatum.csproj" />
+</Solution>

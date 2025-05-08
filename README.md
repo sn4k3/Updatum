@@ -1,13 +1,24 @@
 ﻿# Updatum
 
+[![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/master/LICENSE)
+[![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/Updatum?style=for-the-badge)](#)
+[![Code size](https://img.shields.io/github/languages/code-size/sn4k3/Updatum?style=for-the-badge)](#)
+[![Nuget](https://img.shields.io/nuget/v/Updatum?style=for-the-badge)](https://www.nuget.org/packages/Updatum)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/sn4k3?color=red&style=for-the-badge)](https://github.com/sponsors/sn4k3)
+
 Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using **GitHub Releases**.  
 It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.  
 Whether you're building a desktop tool or a larger application, Updatum helps you ensure your users are always on the latest version — effortlessly.
 
 ## Features
 
+- **💻 Cross-Platform:** Works on Windows, Linux, and MacOS.
+- **⚙️ Flexible Integration:** Easily embed into your WPF, WinForms, or console applications.
 - **🔍 Update Checker:** Manually and/or automatically checks GitHub for the latest release version.
+- **📦 Asset Management:** Automatically fetches the latest release assets based on your platform and architecture.
 - **📄 Changelog Support:** Retrive release(s) notes directly from GitHub Releases.
+- **⬇️ Download with Progress Tracking:** Download and track progress handler.
+- **🔄 Auto-Upgrade Support:** Automatically upgrades your application to a new release.
 - **⚙️ Flexible Integration:** Easily embed into your WPF, WinForms, or console applications.
 - **📦 No External Dependencies:** Minimal overhead and no need for complex update infrastructure.
 
@@ -15,8 +26,8 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
 
 1. Publish your application to GitHub Releases.
 1. Name your assets acordingly the platform and architecture:
-   - Windows: `MyApp_win-x64_v1.0.0.exe`, `MyApp_win-x64_v1.0.0.msi`
-   - Linux: `MyApp_linux-x64_v1.0.0.exe`
+   - Windows: `MyApp_win-x64_v1.0.0.exe`, `MyApp_win-x64_v1.0.0.msi`, `MyApp_win-x64_v1.0.0.zip`
+   - Linux: `MyApp_linux-x64_v1.0.0.AppImage`, `MyApp_linux-x64_v1.0.0.zip`
    - MacOS x64: `MyApp_osx-arm64_v1.0.0.zip`
    - [Example for assets](https://github.com/sn4k3/UVtools/releases/latest)
    - **NOTE:** The asset fetching can be configurable
@@ -79,25 +90,22 @@ public static async Task Main(string[] args)
 ## FAQs
 
 <details>
+<summary>How to provide a custom asset pattern</summary>
 
-<summary>How to provide a custom asset filter</summary>
-
-### Customize the asset filter
+### Customize the asset pattern
 
 Your asset naming convention may differ from the default one, and you can customize the asset fetcher to suit your needs.  
-By using the property `AssetRegexFilter` you can provide a regex pattern to match your assets.
+By using the property `AssetRegexPattern` you can provide a regex pattern to match your assets.
 
 ```cssharp
    // Expect assets to be named like: MyApp_winx64_v1.0.0
-   AppUpdater.AssetRegexFilter = $"{RuntimeInformation.RuntimeIdentifier.Replace("-", string.Empty)}";
+   AppUpdater.AssetRegexPattern = $"{RuntimeInformation.RuntimeIdentifier.Replace("-", string.Empty)}";
 ```
-
 </details>
 
 
 
 <details>
-
 <summary>I have multiple assets with same name, but different extension</summary>
 
 ### Customize the asset extension filter
@@ -115,14 +123,12 @@ If you omit this step, the first asset will be used.
 
 **Notes:** 
 
-- The `AssetRegexFilter` can also be used for the same porpose, but it is not recommended.
-
+- The `AssetRegexPattern` can also be used for the same porpose, but it is not recommended.
 </details>
 
 
 
 <details>
-
 <summary>How to listen for the download progress</summary>
 
 ### Listen for the download progress
@@ -149,5 +155,17 @@ private static void AppUpdaterOnPropertyChanged(object? sender, PropertyChangedE
 **Notes:**
 
 - The frequency of progress change can be adjusted with: `DownloadProgressUpdateFrequencySeconds`
+</details>
 
+<details>
+<summary>How to check for updates in a time basis</summary>
+
+### Check for updates in a time basis
+
+You can make use of built-in timer object: `AutoUpdateCheckTimer` and listen for `UpdateFound` event.
+
+```csharp
+AppUpdater.AutoUpdateCheckTimer.Interval = TimeSpan.FromHours(1).TotalMilliseconds;
+AppUpdater.AutoUpdateCheckTimer.Start();
+```
 </details>

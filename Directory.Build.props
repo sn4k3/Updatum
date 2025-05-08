@@ -1,0 +1,52 @@
+<Project>
+    <PropertyGroup>
+        <!-- Project -->
+        <Nullable>enable</Nullable>
+
+        <!-- Metadata -->
+        <ProductName>Updatum</ProductName>
+        <Company>PTRTECH</Company>
+        <CompanyRDNS>pt.ptrtech</CompanyRDNS>
+        <Authors>Tiago Conceição</Authors>
+        <Copyright>Copyright 2025-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
+        <Description>Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using GitHub Releases.
+It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.</Description>
+
+        <!-- Package -->
+        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>
+        <PackageIcon>$(ProductName)-128.png</PackageIcon>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+        <RepositoryType>Git</RepositoryType>
+        <RepositoryUrl>https://github.com/sn4k3/Updatum</RepositoryUrl>
+        <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+        <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
+        <AssemblyVersion>0.0.1</AssemblyVersion>
+        <PackageTags>Updatum;updater;appupdater;versionchecker;auto-update;github-releases;version-check;changelog;self-updating</PackageTags>
+
+        <!-- Set the path map and artifacts path. -->
+        <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
+        <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+        <CommonPublishDir>$(ArtifactsPath)\publish</CommonPublishDir>
+
+        <!-- Enable Build Acceleration in Visual Studio. -->
+        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+
+        <!-- Sign -->
+        <SignAssembly>True</SignAssembly>
+        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(ProductName).snk</AssemblyOriginatorKeyFile>
+
+        <!-- No pack under Debug -->
+        <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
+    </PropertyGroup>
+
+    <!-- GitHub Actions -->
+    <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)media\$(ProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
+    </ItemGroup>
+</Project>

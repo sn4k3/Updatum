@@ -7,36 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing, please check if the issue already exists (either open or closed) by using the search bar on the [issues page](https://github.com/sn4k3/UVtools/issues?q=). If it does, comment there. Even if it's closed, we can reopen it based on your comment.
-  - type: textarea
-    id: system
-    attributes:
-      label: System
-      placeholder: |
-        1. Go to "UVtools -> Help -> About"
-        2. Click on "Copy information"
-        3. Paste that infomation here
-      render: Text
-    validations:
-      required: true
-  - type: textarea
-    id: machine
-    attributes:
-      label: Printer and Slicer
-      description: Write down your printer model and the slicer you use (If applicable).
-      placeholder: |
-        - Printer: 
-        - Slicer: 
-      value: |
-        - Printer: 
-        - Slicer: 
-    validations:
-      required: false
+        Before filing, please check if the issue already exists (either open or closed) by using the search bar on the [issues page](https://github.com/sn4k3/Updatum/issues?q=). If it does, comment there. Even if it's closed, we can reopen it based on your comment.
   - type: textarea
     id: bug_description
     attributes:
       label: Description of the bug
-      description: A clear and concise description of what the bug is. Please, enclose a screenshot whenever possible (even when you think the description is clear). What did you expect to happen?
+      description: A clear and concise description of what the bug is. What did you expect to happen?
       placeholder: |
         What is the problem?
         What did you expect?
@@ -77,7 +53,7 @@ body:
 #    id: terms
 #    attributes:
 #      label: Code of Conduct
-#      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/sn4k3/UVtools/blob/master/CODE_OF_CONDUCT.md)
+#      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/sn4k3/Updatum/blob/master/CODE_OF_CONDUCT.md)
 #      options:
 #        - label: I agree to follow this project's Code of Conduct
 #          required: true
@@ -89,5 +65,5 @@ body:
         2. Review all information and make sure it's clear and complete.
         3. Take full window screenshots, don't cut information even if you think it's unnecessary!
         4. Note that the information and files posted here will be public.
-        
-        # [![UVtools](https://github.com/sn4k3/UVtools/raw/master/UVtools.CAD/UVtools-32x32.png)](#) Thank's you!
+
+        # [![UVtools](https://github.com/sn4k3/Updatum/raw/master/media/Updatum-32.png)](#) Thank's you!

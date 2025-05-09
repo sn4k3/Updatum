@@ -34,7 +34,7 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
 
 ## Example
 
-Check the Updatum.FakeApp project for a example of how to use Updatum.
+Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a example of how to use Updatum.
 
 ## Usage
 
@@ -98,8 +98,8 @@ Your asset naming convention may differ from the default one, and you can custom
 By using the property `AssetRegexPattern` you can provide a regex pattern to match your assets.
 
 ```cssharp
-   // Expect assets to be named like: MyApp_winx64_v1.0.0
-   AppUpdater.AssetRegexPattern = $"{RuntimeInformation.RuntimeIdentifier.Replace("-", string.Empty)}";
+// Expect assets to be named like: MyApp_winx64_v1.0.0
+AppUpdater.AssetRegexPattern = $"{RuntimeInformation.RuntimeIdentifier.Replace("-", string.Empty)}";
 ```
 </details>
 
@@ -118,7 +118,7 @@ If you omit this step, the first asset will be used.
 
 
 ```cssharp
-   if (IsPortableApp) AppUpdater.AssetExtensionFilter = "zip";
+if (IsPortableApp) AppUpdater.AssetExtensionFilter = "zip";
 ```
 
 **Notes:** 

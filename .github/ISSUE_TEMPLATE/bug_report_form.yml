@@ -53,7 +53,7 @@ body:
 #    id: terms
 #    attributes:
 #      label: Code of Conduct
-#      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/sn4k3/Updatum/blob/master/CODE_OF_CONDUCT.md)
+#      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/sn4k3/Updatum/blob/main/CODE_OF_CONDUCT.md)
 #      options:
 #        - label: I agree to follow this project's Code of Conduct
 #          required: true
@@ -66,4 +66,4 @@ body:
         3. Take full window screenshots, don't cut information even if you think it's unnecessary!
         4. Note that the information and files posted here will be public.
 
-        # [![UVtools](https://github.com/sn4k3/Updatum/raw/master/media/Updatum-32.png)](#) Thank's you!
+        # [![Updatum](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png)](#) Thank's you!

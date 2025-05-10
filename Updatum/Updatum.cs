@@ -944,7 +944,7 @@ public partial class Updatum : INotifyPropertyChanged
 
 #if !DEBUG
                                 stream.WriteLine("echo - Removing self");
-                                stream.WriteLine($"del /F /Q \"%~f0"");
+                                stream.WriteLine("del /F /Q \"%~f0\"");
 #endif
 
                                 stream.WriteLine("endlocal");
@@ -1158,7 +1158,7 @@ public partial class Updatum : INotifyPropertyChanged
 
 #if !DEBUG
                                 stream.WriteLine("echo \"- Removing self\"");
-                                stream.WriteLine($"rm -f \"{upgradeScriptFilePath}\"");
+                                stream.WriteLine("rm -f -- \"$0\"");
 #endif
 
                                 stream.WriteLine("echo \"- Completed\"");

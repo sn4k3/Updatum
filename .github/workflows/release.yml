@@ -1,0 +1,35 @@
+name: Nuget package publish
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+env:
+   VERSION: ${{ github.ref_name }}
+   NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+
+jobs:
+
+  nuget:
+    name: 📦 Nuget - Publish package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 🛒 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟣 Setup .NET 9.0
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 9.0.x
+
+      - name: 📦 Pack
+        run: |
+          dotnet pack --configuration Release --output . -p:Version=${{ env.VERSION }}
+
+      - name: 🚀 Push nuget.org
+        run: dotnet nuget push *.nupkg --source https://api.nuget.org/v3/index.json --api-key ${NUGET_TOKEN} --skip-duplicate
+
+      - name: 🚀 Push Github
+        run: dotnet nuget push *.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ github.token }} --skip-duplicate

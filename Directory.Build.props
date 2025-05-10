@@ -22,7 +22,6 @@ It simplifies the update process by checking for new versions, retrieving releas
         <RepositoryUrl>https://github.com/sn4k3/Updatum</RepositoryUrl>
         <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
         <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
-        <AssemblyVersion>0.0.1</AssemblyVersion>
         <PackageTags>Updatum;updater;appupdater;versionchecker;auto-update;github-releases;version-check;changelog;self-updating</PackageTags>
 
         <!-- Set the path map and artifacts path. -->
@@ -48,5 +47,6 @@ It simplifies the update process by checking for new versions, retrieving releas
 
     <ItemGroup>
         <None Include="$(MSBuildThisFileDirectory)media\$(ProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="false"/>
     </ItemGroup>
 </Project>

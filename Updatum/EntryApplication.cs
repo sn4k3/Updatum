@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
 using Updatum.Extensions;
 
 namespace Updatum;
@@ -30,7 +32,29 @@ public static class EntryApplication
     /// <summary>
     /// Gets the process name of the running application.
     /// </summary>
-    public static string? ProcessName { get; }
+    public static string ProcessName { get; }
+
+    /// <summary>
+    /// Gets the application bundle type.
+    /// </summary>
+    public static readonly ApplicationBundleType BundleType;
+
+    /// <summary>
+    /// Checks if the application is running under a bundled application.<br/>
+    /// Example: dotnet single-file, linux AppImage, macOS app bundle.
+    /// </summary>
+    public static bool IsAppBundled => BundleType
+        is ApplicationBundleType.DotNetSingleFile
+        or ApplicationBundleType.LinuxAppImage
+        or ApplicationBundleType.MacOSAppBundle;
+
+    /// <summary>
+    /// Checks if the application is running under a bundled single-file application that extracts itself.<br/>
+    /// Example: dotnet single-file, linux AppImage.
+    /// </summary>
+    public static bool IsSingleFileApp => BundleType
+        is ApplicationBundleType.DotNetSingleFile
+        or ApplicationBundleType.LinuxAppImage;
 
     /// <summary>
     /// Checks if the application is running under a dotnet process.
@@ -73,11 +97,18 @@ public static class EntryApplication
     public static bool IsMacOSAppBundle => !string.IsNullOrWhiteSpace(MacOSAppBundlePath);
 
     /// <summary>
+    /// Gets the base directory of the entry executable of the running application.<br/>
+    /// This is the directory where the entry executable is located.
+    /// </summary>
+    public static string? BaseDirectory { get; }
+
+    /// <summary>
     /// Gets the full path to the entry executable of the running application.
     /// </summary>
     /// <remarks>Note the executable is from entry point and not the app executable itself.<br/>
     /// It's expected to be different from <see cref="Environment.ProcessPath"/> in some cases.<br/>
-    /// Example: The MyApp.AppImage, MyApp.app will be returned instead of the app executable.</remarks>
+    /// Example: The MyApp.AppImage, MyApp.app will be returned instead of the app executable.<br/>
+    /// If running from dotnet, it will return the AssemblyLocation, eg: myapp.dll.</remarks>
     public static readonly string? ExecutablePath;
 
     /// <summary>
@@ -86,39 +117,20 @@ public static class EntryApplication
     public static string? ExecutableFileName { get; }
 
     /// <summary>
-    /// Gets the base directory of the entry executable of the running application.<br/>
-    /// This is the directory where the entry executable is located.
-    /// </summary>
-    public static string? BaseDirectory { get; }
-
-
-    /// <summary>
     /// Gets if the executable path is known, <see cref="ExecutablePath"/> is not null.
     /// </summary>
     [MemberNotNull(nameof(ExecutablePath), nameof(ExecutableFileName), nameof(BaseDirectory))]
     public static bool IsExecutablePathKnown { get; }
 
     /// <summary>
-    /// Gets the application bundle type.
+    /// Gets the generic runtime identifier for the current operating system.<br/>
+    /// This prevents from returning specific runtime and versions like ubuntu-22.04-x64 when using <see cref="RuntimeInformation.RuntimeIdentifier"/>
     /// </summary>
-    public static readonly ApplicationBundleType BundleType;
-
-    /// <summary>
-    /// Checks if the application is running under a bundled application.<br/>
-    /// Example: dotnet single-file, linux AppImage, macOS app bundle.
-    /// </summary>
-    public static bool IsAppBundled => BundleType
-        is ApplicationBundleType.DotNetSingleFile
-        or ApplicationBundleType.LinuxAppImage
-        or ApplicationBundleType.MacOSAppBundle;
-
-    /// <summary>
-    /// Checks if the application is running under a bundled single-file application that extracts itself.<br/>
-    /// Example: dotnet single-file, linux AppImage.
-    /// </summary>
-    public static bool IsSingleFileApp => BundleType
-        is ApplicationBundleType.DotNetSingleFile
-        or ApplicationBundleType.LinuxAppImage;
+    public static string GenericRuntimeIdentifier =>
+        OperatingSystem.IsWindows() ? $"win-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
+        OperatingSystem.IsMacOS() ? $"osx-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
+        OperatingSystem.IsLinux() ? $"linux-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
+        RuntimeInformation.RuntimeIdentifier;
 
     static EntryApplication()
     {
@@ -132,12 +144,20 @@ public static class EntryApplication
             }
         }
 
-        ExecutablePath = DotNetSingleFileAppPath
-            ?? LinuxAppImagePath
-            ?? MacOSAppBundlePath
-            ?? Environment.ProcessPath;
+        ProcessName = Path.GetFileName(Environment.ProcessPath) ?? Process.GetCurrentProcess().ProcessName;
+        if (!string.IsNullOrWhiteSpace(ProcessName) && OperatingSystem.IsWindows() && !ProcessName.Contains('.')) ProcessName += ".exe";
+        IsRunningFromDotNetProcess = ProcessName is "dotnet" or "dotnet.exe";
 
-        if (!string.IsNullOrWhiteSpace(ExecutablePath))
+        ExecutablePath = DotNetSingleFileAppPath
+                        ?? LinuxAppImagePath
+                        ?? MacOSAppBundlePath
+                        ?? (IsRunningFromDotNetProcess && !string.IsNullOrWhiteSpace(AssemblyLocation) ? AssemblyLocation : Environment.ProcessPath);
+
+        if (string.IsNullOrWhiteSpace(ExecutablePath))
+        {
+            BaseDirectory = AppContext.BaseDirectory;
+        }
+        else
         {
             ExecutableFileName = Path.GetFileName(ExecutablePath);
             BaseDirectory = Path.GetDirectoryName(ExecutablePath);
@@ -148,11 +168,6 @@ public static class EntryApplication
         else if (IsLinuxAppImage) BundleType = ApplicationBundleType.LinuxAppImage;
         else if (IsMacOSAppBundle) BundleType = ApplicationBundleType.MacOSAppBundle;
         else BundleType = ApplicationBundleType.None;
-
-        var currentProcess = Process.GetCurrentProcess();
-        ProcessName = Path.GetFileName(Environment.ProcessPath) ?? currentProcess.ProcessName;
-        if (!string.IsNullOrWhiteSpace(ProcessName) && OperatingSystem.IsWindows() && !ProcessName.Contains('.')) ProcessName += ".exe";
-        IsRunningFromDotNetProcess = ProcessName is "dotnet" or "dotnet.exe";
     }
 
     /// <summary>
@@ -165,20 +180,51 @@ public static class EntryApplication
         if (!IsExecutablePathKnown) return false;
         if (!File.Exists(ExecutablePath)) return false;
 
-        if (IsRunningFromDotNetProcess)
-        {
-            if (string.IsNullOrWhiteSpace(AssemblyLocation)) return false;
-            runArguments = $"\"{AssemblyLocation}\" {runArguments}";
-        }
-
         try
         {
-            Utilities.StartProcess(ExecutablePath, runArguments);
+            if (IsRunningFromDotNetProcess)
+            {
+                Utilities.StartProcess(Environment.ProcessPath ?? ProcessName, $"\"{ExecutablePath}\" {runArguments}");
+            }
+            else
+            {
+                Utilities.StartProcess(ExecutablePath, runArguments);
+            }
+
             return true;
         }
         catch
         {
             return false;
         }
+    }
+
+
+    /// <summary>
+    /// Returns a string representation of the entry application information.
+    /// </summary>
+    /// <returns></returns>
+    public new static string ToString()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"{nameof(AssemblyName)}: {AssemblyName}");
+        sb.AppendLine($"{nameof(AssemblyLocation)}: {AssemblyLocation}");
+        sb.AppendLine($"{nameof(AssemblyVersion)}: {AssemblyVersion}");
+        sb.AppendLine($"{nameof(ProcessName)}: {ProcessName}");
+        sb.AppendLine($"{nameof(BundleType)}: {BundleType}");
+        sb.AppendLine($"{nameof(IsAppBundled)}: {IsAppBundled}");
+        sb.AppendLine($"{nameof(IsSingleFileApp)}: {IsSingleFileApp}");
+        sb.AppendLine($"{nameof(IsRunningFromDotNetProcess)}: {IsRunningFromDotNetProcess}");
+        sb.AppendLine($"{nameof(IsDotNetSingleFileApp)}: {IsDotNetSingleFileApp}");
+        if (IsDotNetSingleFileApp) sb.AppendLine($"{nameof(DotNetSingleFileAppPath)}: {DotNetSingleFileAppPath}");
+        sb.AppendLine($"{nameof(IsLinuxAppImage)}: {IsLinuxAppImage}");
+        if (IsLinuxAppImage) sb.AppendLine($"{nameof(LinuxAppImagePath)}: {LinuxAppImagePath}");
+        sb.AppendLine($"{nameof(IsMacOSAppBundle)}: {IsMacOSAppBundle}");
+        if (IsMacOSAppBundle) sb.AppendLine($"{nameof(MacOSAppBundlePath)}: {MacOSAppBundlePath}");
+        sb.AppendLine($"{nameof(BaseDirectory)}: {BaseDirectory}");
+        sb.AppendLine($"{nameof(ExecutablePath)}: {ExecutablePath}");
+        sb.AppendLine($"{nameof(ExecutableFileName)}: {ExecutableFileName}");
+        sb.AppendLine($"{nameof(IsExecutablePathKnown)}: {IsExecutablePathKnown}");
+        return sb.ToString();
     }
 }

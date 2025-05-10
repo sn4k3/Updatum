@@ -1,6 +1,5 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace Updatum.FakeApp;
@@ -11,8 +10,8 @@ internal class Program
     internal static readonly Updatum AppUpdater = new("sn4k3", "UVtools", new Version(5, 0, 0))
     {
         // Regex filter to get the correct asset from running system
-        // Defaults would work here too: RuntimeInformation.RuntimeIdentifier
-        AssetRegexPattern = $"^UVtools_{RuntimeInformation.RuntimeIdentifier}_v",
+        // Defaults would work here too: EntryApplication.GenericRuntimeIdentifier
+        AssetRegexPattern = $"^UVtools_{EntryApplication.GenericRuntimeIdentifier}_v",
         // Displays a basic user interface for MSI package
         // This will show the installer UI installing without any interaction
         InstallUpdateWindowsInstallerArguments = "/qb",
@@ -31,6 +30,8 @@ internal class Program
         {
             AppUpdater.AssetExtensionFilter = ".AppImage"; // Force AppImage because zip also available on assets
         }
+
+        Console.WriteLine(EntryApplication.ToString());
 
         AppUpdater.PropertyChanged += AppUpdaterOnPropertyChanged;
         Console.WriteLine($"Checking for updates for {AppUpdater.Owner}/{AppUpdater.Repository}");

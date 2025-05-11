@@ -42,6 +42,14 @@ If automatic installation is called, Updatum will:
 - If file is an single-file application such as dotnet single-file executables or linux AppImage, it will be moved to the current folder and rename it to the current name and version.
 - If file is an installer, it will be executed and follow the normal installation process.
 
+### Compatibility
+
+- Portable applications (zip)
+- Dotnet single-files publishes
+- Windows Installer (exe and msi)
+- Linux [AppImage](https://appimage.org/)
+- macOS app bunble
+
 ## Example
 
 Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a example of how to use Updatum.

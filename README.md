@@ -32,6 +32,17 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
    - [Example for assets](https://github.com/sn4k3/UVtools/releases/latest)
    - **NOTE:** The asset fetching can be configurable
 
+## Auto installer strategy
+
+You can opt to install the update manually or automatically.
+If automatic installation is called, Updatum will:
+
+- Check if asset is a zip file, if so, and if only one asset is found, it will extract the file to a temporary folder, and continue with the other checks.
+  - Otherwise, if the zip file contains multiple files it will be extracted to a temporary folder, and handled as a portable application.
+  - A script will be created and executed to perform checks, kill instances, merge files, rename the version in folder name and execute the new instance.
+- If file is an single-file application such as dotnet single-file executables or linux AppImage, it will be moved to the current folder and rename it to the current name and version.
+- If file is an installer, it will be executed and follow the normal installation process.
+
 ## Example
 
 Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a example of how to use Updatum.

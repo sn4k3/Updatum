@@ -18,6 +18,7 @@ internal class Program
         // Fallback name if unable to determine the executable name from the entry application
         // This is safe to omit, but as we are using a fake app, we need to set it
         InstallUpdateSingleFileExecutableName = "UVtools",
+        InstallUpdateCodesignMacOSApp = true,
     };
 
     private static async Task Main()
@@ -110,7 +111,7 @@ internal class Program
         }
         else if (e.PropertyName == nameof(Updatum.DownloadedPercentage))
         {
-            Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadTotalSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
+            Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
         }
     }
 }

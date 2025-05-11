@@ -143,6 +143,7 @@ public partial class Updatum : INotifyPropertyChanged
     private string? _installUpdateSingleFileExecutableName;
     private string? _installUpdateInjectCustomScript;
     private UpdatumState _state;
+    private bool _installUpdateCodesignMacOSApp;
 
     #endregion
 
@@ -313,7 +314,7 @@ public partial class Updatum : INotifyPropertyChanged
         private set
         {
             if (!RaiseAndSetIfChanged(ref _downloadSizeBytes, value)) return;
-            RaisePropertyChanged(nameof(DownloadTotalSizeMegabytes));
+            RaisePropertyChanged(nameof(DownloadSizeMegabytes));
             RaisePropertyChanged(nameof(DownloadedPercentage));
         }
     }
@@ -335,12 +336,12 @@ public partial class Updatum : INotifyPropertyChanged
     /// <summary>
     /// Gets the total size of the download in megabytes.
     /// </summary>
-    public double DownloadTotalSizeMegabytes => DownloadSizeBytes > 0 ? Math.Round(_downloadedBytes / 1024.0 / 1024.0, 2, MidpointRounding.AwayFromZero) : double.NaN;
+    public double DownloadSizeMegabytes => DownloadSizeBytes > 0 ? Math.Round(DownloadSizeBytes / 1024.0 / 1024.0, 2, MidpointRounding.AwayFromZero) : double.NaN;
 
     /// <summary>
     /// Gets the current downloaded size in megabytes.
     /// </summary>
-    public double DownloadedMegabytes => DownloadedBytes > 0 ? Math.Round(_downloadedBytes / 1024.0 / 1024.0, 2, MidpointRounding.AwayFromZero) : 0.0;
+    public double DownloadedMegabytes => DownloadedBytes > 0 ? Math.Round(DownloadedBytes / 1024.0 / 1024.0, 2, MidpointRounding.AwayFromZero) : 0.0;
 
     /// <summary>
     /// Gets the current downloaded percentage of the progress from 0% to 100%.
@@ -368,6 +369,15 @@ public partial class Updatum : INotifyPropertyChanged
     {
         get => _installUpdateSingleFileExecutableName;
         set => RaiseAndSetIfChanged(ref _installUpdateSingleFileExecutableName, value);
+    }
+
+    /// <summary>
+    /// Gets or sets if the auto updater should locally codesign the macOS applications.
+    /// </summary>
+    public bool InstallUpdateCodesignMacOSApp
+    {
+        get => _installUpdateCodesignMacOSApp;
+        set => RaiseAndSetIfChanged(ref _installUpdateCodesignMacOSApp, value);
     }
 
     /// <summary>
@@ -1044,6 +1054,13 @@ public partial class Updatum : INotifyPropertyChanged
                                     stream.WriteLine("echo \"- Removing com.apple.quarantine flag\"");
                                     stream.WriteLine("find \"$SOURCE_PATH\" -print0 | xargs -0 xattr -d com.apple.quarantine &> /dev/null");
                                     stream.WriteLine();
+
+                                    if (InstallUpdateCodesignMacOSApp)
+                                    {
+                                        stream.WriteLine("echo \"- Force codesign to allow the app to run directly\"");
+                                        stream.WriteLine("find \"$SOURCE_PATH\" -maxdepth 1 -type d -name \"*.app\" -print0 | xargs -0 -I {} codesign --force --sign - \"{}\"");
+                                        stream.WriteLine();
+                                    }
                                 }
 
                                 // Copy files
@@ -1066,12 +1083,6 @@ public partial class Updatum : INotifyPropertyChanged
                                 stream.WriteLine("fi");
                                 stream.WriteLine();
 
-                                if (OperatingSystem.IsMacOS())
-                                {
-                                    stream.WriteLine("echo \"- Force codesign to allow the app to run directly\"");
-                                    stream.WriteLine("codesign --force --deep --sign - \"$SOURCE_PATH\"");
-                                    stream.WriteLine();
-                                }
 
                                 // Replace folder name with the new version name when required
                                 if (Version.TryParse(newVersionStr, out var newVersion) && !currentVersion.Equals(newVersion))

@@ -1,4 +1,4 @@
-﻿# [![Updatum](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png)](#) Updatum
+﻿# [![](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png)](#) Updatum
 
 [![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/master/LICENSE)
 [![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/Updatum?style=for-the-badge)](#)
@@ -19,7 +19,6 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
 - **📄 Changelog Support:** Retrive release(s) notes directly from GitHub Releases.
 - **⬇️ Download with Progress Tracking:** Download and track progress handler.
 - **🔄 Auto-Upgrade Support:** Automatically upgrades your application to a new release.
-- **⚙️ Flexible Integration:** Easily embed into your WPF, WinForms, or console applications.
 - **📦 No External Dependencies:** Minimal overhead and no need for complex update infrastructure.
 
 ## Requirements

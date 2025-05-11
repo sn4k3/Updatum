@@ -1,4 +1,4 @@
-﻿# ![](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png) Updatum
+﻿# [![](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png)](#) Updatum
 
 [![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/master/LICENSE)
 [![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/Updatum?style=for-the-badge)](#)

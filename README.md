@@ -54,6 +54,187 @@ If automatic installation is called, Updatum will:
 
 Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a example of how to use Updatum.
 
+<details>
+<summary>Console output:</summary>
+
+
+```
+Checking for updates for sn4k3/UVtools
+Updater state changed: CheckingForUpdate
+Updater state changed: None
+Update found: True
+
+Changelog:
+## v5.0.1
+
+> Release date: 12/19/2024 06:56:33 +00:00
+> Release diff: 1
+
+- (Fix) Windows MSI: System.IO.Compression.Native is missing when upgrading from 4.4.3 (#957)
+- (Fix) Index out of range when saving some file formats (#957)
+- (Change) Exposure time finder: Allow using 0 for the normal step in the multiple exposure generator (#958)
+
+---
+
+## v5.0.2
+
+> Release date: 12/19/2024 15:28:39 +00:00
+> Release diff: 2
+
+- (Fix) Remove a condition that prevents the new Anycubic file format from being used
+- (Upgrade) AvaloniaUI from 11.1.3 to 11.2.2
+
+---
+
+## v5.0.3
+
+> Release date: 12/28/2024 19:22:42 +00:00
+> Release diff: 3
+
+- Anycubic file format:
+  - (Fix) Reset TSMC values to comply with globals when decoding file and AdvancedMode is disabled (#971)
+  - (Fix) Setting the LiftHeight2 was setting the base value to BottomLiftHeight2
+  - (Fix) Setting the BottomRetractSpeed was not applying the value in the base property
+- Multiple exposure finder:
+   - (Fix) Counter triangles not taking all the new left space
+   - (Fix) When doing multiple heights the text label always show the base height
+- (Improvement) Layer image viewer internal handling
+- (Fix) Settings - Send to process: Unable to pick a process file, it was selecting folder instead
+- (Fix) Save As can show incorrect file extension description when there are other file formats with the same extension
+
+---
+
+## v5.0.4
+
+> Release date: 01/08/2025 02:45:34 +00:00
+> Release diff: 4
+
+- PCB Exposure:
+  - (Fix) Polygon primitive vertex count not parsing correctly when having argument (#976)
+  - (Fix) Obround aperture to follow the correct implementation (two semicircles connected by parallel lines tangent to their endpoints) (#976)
+  - (Fix) Implement the "hole diameter" argument in all apertures (#976)
+  - (Fix) Implement the "rotation" argument for the polygon aperture
+
+---
+
+## v5.0.5
+
+> Release date: 01/09/2025 03:19:04 +00:00
+> Release diff: 5
+
+- (Add) PrusaSlicer printer: Elegoo Saturn 4 Ultra 16K
+- (Improvement) Goo: Implement and support the tilting vat printers
+- (Improvement) All shapes in pixel editor will now respect the non-equal pixel pitch and compensate the lower side to print a regular shape, this also affects the polygons on PCB exposure tool and other tools as well
+- (Fix) PCB Exposure: Use raw polygons instead of angle aligned polygons to respect the gerber implementation (#976)
+
+---
+
+## v5.0.6
+
+> Release date: 01/31/2025 02:21:16 +00:00
+> Release diff: 6
+
+- **PCB Exposure:**
+  - (Fix) When importing gerber files via drag and drop to the main window the file was created with 0mm layer height and no exposure set
+  - (Fix) Merging multiple gerber files with mirror active was mirroring the image in each draw causing the wrong output (#980)
+  - (Fix) Excellon drill format does not load tools when they have spindle parameters [F/C] (#980)
+  - (Fix) Excellon drill format to respect the integer and decimal digit count when specifying them (#980)
+- **Stress Tower:**
+  - (Improvement) Allow to pause and cancel the operation
+  - (Improvement) Process layers in a more efficient way to reduce allocations and be able to produce the test without RAM hogging
+- (Upgrade) .NET from 9.0.0 to 9.0.1
+- (Upgrade) OpenCV from 4.9.0 to 4.10.0
+
+---
+
+## v5.0.7
+
+> Release date: 02/15/2025 20:46:22 +00:00
+> Release diff: 7
+
+- **Layer previewer: (#990)**
+  - (Add) Shortcuts: Ctrl/? + to zoom in and Ctrl/? - to zoom out in the layer previewer
+  - (Add) Allow to horizontal scroll the image with the mouse dispacement buttons and/or wheel (Only for mouse with such buttons)
+  - (Add) Hold Ctrl key while use the mouse wheel to vertical scroll the image instead of zoom
+  - (Add) Zoom behavior: Zoom with pre-defined levels or native incremental zoom (Configurable in settings, default: Levels)
+  - (Add) Zoom debounce time to prevent the zoom to be triggered multiple times when using a trackpad (Configurable in settings, default: 20ms)
+- (Improvement) Linux: Show app icon on AppImage after integration with the desktop environment
+- (Fix) Unable to find PrusaSlicer >= 2.9.0 on Linux (Flatpak folder change) (#1000)
+- (Fix) PrusaSlicer: Anycubic Photon Mono M7 Max incorrect extension (#995)
+- (Upgrade) .NET from 9.0.1 to 9.0.2
+- (Upgrade) AvaloniaUI from 11.2.3 to 11.2.4
+
+---
+
+## v5.0.8
+
+> Release date: 03/10/2025 04:05:17 +00:00
+> Release diff: 8
+
+- (Fix) Ignore "org.freedesktop.DBus.Error.ServiceUnknown" exception to prevent crash on Linux (#964)
+- (Upgrade) AvaloniaUI from 11.2.3 to 11.2.4
+
+---
+
+## v5.0.9
+
+> Release date: 04/04/2025 00:14:04 +00:00
+> Release diff: 9
+
+- (Add) PrusaSlicer printer: Elegoo Mars 5 Ultra (#1006)
+- (Fix) Ignore the "org.freedesktop.DBus.Error.UnknownMethod" exception to prevent crash on Linux (#964)
+- (Fix) Goo: Bad print when using tilting VAT printer (#1013)
+- (Upgrade) .NET from 9.0.2 to 9.0.3
+- (Upgrade) AvaloniaUI from 11.2.5 to 11.2.6
+
+---
+
+## v5.1.0
+
+> Release date: 04/22/2025 01:40:17 +00:00
+> Release diff: 10
+
+- (Add) Pixel Arithmetic - Brightness Step: Mutates the initial brightness with a step that is added/subtracted to the current value dependent on the processed layer count (#1014)
+- (Fix) Anycubic ZIP: Implement the missing fields from manifest file and allow to tune TSMC and regular global values (#1018)
+- (Fix) Handle floating precision error when calculating the `PerLayerSettings` flag (#1013)
+- (Fix) Linux: Pixel editor drawing cursor preview not visible (#1019)
+- (Fix) Use `async Task` instead of `async void` where possible
+- (Improvement) Use some refactorings for NET 9.0 features
+- (Change) Compile openCV with lower linux requirement (#1015)
+- (Upgrade) .NET from 9.0.3 to 9.0.4
+- (Upgrade) AvaloniaUI from 11.2.6 to 11.3.0-beta2
+
+---
+
+## v5.1.1
+
+> Release date: 05/09/2025 19:04:22 +00:00
+> Release diff: 11
+
+- (Fix) Anycubic ZIP: `System.InvalidOperationException: Sequence contains no elements` when having empty layers (#1023)
+- (Improvement) CTB and GOO: Set all lift properties instead some of them for the tilting vat printers
+- (Improvement) Convert most Linq to ZLinq
+- (Upgrade) AvaloniaUI from 11.3.0-beta2 to 11.3.0
+
+---
+
+
+Do you want to download the v5.1.1 update? (y/yes/n/no)
+y
+Downloading UVtools_win-x64_v5.1.1.msi...
+Updater state changed: DownloadingUpdate
+Downloaded: 0 MB / 78.16 MB  (0 %)
+Downloaded: 20.01 MB / 78.16 MB  (25.6 %)
+Downloaded: 40.8 MB / 78.16 MB  (52.2 %)
+Downloaded: 61.66 MB / 78.16 MB  (78.89 %)
+Downloaded: 78.16 MB / 78.16 MB  (100 %)
+Updater state changed: None
+Download finished: C:\Users\tiago\AppData\Local\Temp\UVtools_win-x64_v5.1.1.msi
+Do you want to install the update? (y/yes/n/no)
+```
+
+</details>
+
 ## Usage
 
 

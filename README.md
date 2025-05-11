@@ -31,10 +31,10 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
    - [Example for assets](https://github.com/sn4k3/UVtools/releases/latest)
    - **NOTE:** The asset fetching can be configurable
 
-## Auto installer strategy
+## Auto updater strategy
 
 You can opt to install the update manually or automatically.
-If automatic installation is called, Updatum will:
+If automatic, Updatum will:
 
 - Check if asset is a zip file, if so, and if only one asset is found, it will extract the file to a temporary folder, and continue with the other checks.
   - Otherwise, if the zip file contains multiple files it will be extracted to a temporary folder, and handled as a portable application.

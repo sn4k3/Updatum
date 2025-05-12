@@ -1,4 +1,4 @@
-﻿# [![Logo](https://github.com/sn4k3/Updatum/raw/main/media/Updatum-32.png)](#) Updatum
+﻿# [![Logo](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/Updatum-32.png)](#) Updatum
 
 [![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/master/LICENSE)
 [![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/Updatum?style=for-the-badge)](#)
@@ -289,7 +289,11 @@ public static async Task Main(string[] args)
 ## Screenshots
 
 
-![UVtools screenshot](https://raw.githubusercontent.com/sn4k3/Updatum/refs/heads/main/media/assets/UVtools_screenshot.png)
+![UVtools screenshot](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/assets/UVtools_screenshot.png)
+![NetSonar screenshot 1](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/assets/NetSonar_screenshot_no_updates.png)
+![NetSonar screenshot 2](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/assets/NetSonar_screenshot_update_found.png)
+![NetSonar screenshot 3](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/assets/NetSonar_screenshot_update_changelog.png)
+![NetSonar screenshot 4](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/assets/NetSonar_screenshot_update_download.png)
 
 ## FAQs
 

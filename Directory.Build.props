@@ -23,6 +23,9 @@ It simplifies the update process by checking for new versions, retrieving releas
         <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
         <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
         <PackageTags>Updatum;updater;appupdater;versionchecker;auto-update;github-releases;version-check;changelog;self-updating</PackageTags>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
         <!-- Set the path map and artifacts path. -->
         <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
@@ -38,11 +41,10 @@ It simplifies the update process by checking for new versions, retrieving releas
 
         <!-- No pack under Debug -->
         <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
-    </PropertyGroup>
 
-    <!-- GitHub Actions -->
-    <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+        <!-- ContinuousIntegrationBuild -->
+        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     </PropertyGroup>
 
     <ItemGroup>

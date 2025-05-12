@@ -129,6 +129,7 @@ public partial class Updatum : INotifyPropertyChanged
     #endregion
 
     #region Members
+    private System.Timers.Timer? _autoUpdateCheckTimer;
     private bool _fetchOnlyLatestRelease;
     private DateTime _lastCheckDateTime = DateTime.MinValue;
     private IReadOnlyList<Release> _releases = [];
@@ -153,14 +154,26 @@ public partial class Updatum : INotifyPropertyChanged
     /// </summary>
     public GitHubClient GithubClient { get; } = new(new Octokit.ProductHeaderValue(EntryApplication.AssemblyName ?? nameof(Updatum), EntryAssemblyVersion.ToString()));
 
-
     /// <summary>
     /// Gets the auto updater timer. Use this to start or stop the timer for your timed auto checks.
     /// </summary>
-    public System.Timers.Timer AutoUpdateCheckTimer { get; } = new(TimeSpan.FromHours(12))
+    public System.Timers.Timer AutoUpdateCheckTimer
     {
-        AutoReset = true,
-    };
+        get
+        {
+            if (_autoUpdateCheckTimer is null)
+            {
+                _autoUpdateCheckTimer = new(TimeSpan.FromHours(12))
+                {
+                    AutoReset = true,
+                };
+
+                _autoUpdateCheckTimer.Elapsed += AutoUpdateCheckTimerOnElapsed;
+            }
+
+            return _autoUpdateCheckTimer;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the current version of the application.
@@ -415,8 +428,10 @@ public partial class Updatum : INotifyPropertyChanged
     /// </summary>
     public Updatum()
     {
-        AssetRegex = new Regex(_assetRegexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        AutoUpdateCheckTimer.Elapsed += AutoUpdateCheckTimerOnElapsed;
+        if (!string.IsNullOrWhiteSpace(_assetRegexPattern))
+        {
+            AssetRegex = new Regex(_assetRegexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        }
     }
 
     /// <summary>
@@ -427,7 +442,7 @@ public partial class Updatum : INotifyPropertyChanged
     /// <param name="currentVersion">Your app version that is current running, if <c>null</c>, it will fetch the version from EntryAssembly.</param>
     /// <param name="gitHubCredentials">Pass the GitHub credentials if required, for extra tokens or visibility.</param>
     [SetsRequiredMembers]
-    public Updatum(string owner, string repository, Version? currentVersion = null, Credentials? gitHubCredentials = null)
+    public Updatum(string owner, string repository, Version? currentVersion = null, Credentials? gitHubCredentials = null) : this()
     {
         Owner = owner;
         Repository = repository;
@@ -470,8 +485,8 @@ public partial class Updatum : INotifyPropertyChanged
         CheckForUpdateCount++;
 
         // If the timer is enabled, stop it to avoid multiple calls to CheckForUpdatesAsync
-        var timerState = AutoUpdateCheckTimer.Enabled;
-        if (AutoUpdateCheckTimer.Enabled)
+        var timerState = _autoUpdateCheckTimer is not null && _autoUpdateCheckTimer.Enabled;
+        if (timerState)
         {
             AutoUpdateCheckTimer.Stop();
         }
@@ -1312,6 +1327,7 @@ public partial class Updatum : INotifyPropertyChanged
     public void ForceTriggerUpdateFromRelease(Release release)
     {
         ReleasesAhead = [release];
+        UpdateFound?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

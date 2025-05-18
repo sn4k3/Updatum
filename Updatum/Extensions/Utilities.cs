@@ -35,18 +35,24 @@ internal static class Utilities
     /// <param name="arguments"></param>
     /// <param name="waitForCompletion"></param>
     /// <param name="waitTimeout"></param>
-    public static void StartProcess(string name, string? arguments, bool waitForCompletion = false, int waitTimeout = Timeout.Infinite)
+    public static int StartProcess(string name, string? arguments, bool waitForCompletion = false, int waitTimeout = Timeout.Infinite)
     {
         try
         {
             using var process = Process.Start(new ProcessStartInfo(name, arguments ?? string.Empty) { UseShellExecute = true });
-            if (process is null) return;
-            if (waitForCompletion) process.WaitForExit(waitTimeout);
+            if (process is null) return -1;
+            if (waitForCompletion)
+            {
+                process.WaitForExit(waitTimeout);
+                return process.ExitCode;
+            }
         }
         catch (Exception e)
         {
             Debug.WriteLine(e);
         }
+
+        return 0;
     }
 
     /// <summary>

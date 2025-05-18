@@ -26,6 +26,11 @@ public enum ApplicationBundleType
     LinuxAppImage,
 
     /// <summary>
+    /// The application is bundled as a Linux Flatpak.
+    /// </summary>
+    LinuxFlatpak,
+
+    /// <summary>
     /// The application is bundled as a macOS app bundle.
     /// </summary>
     MacOSAppBundle,

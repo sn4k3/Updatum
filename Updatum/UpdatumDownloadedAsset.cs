@@ -23,9 +23,24 @@ public record UpdatumDownloadedAsset(Release Release, ReleaseAsset ReleaseAsset,
     public bool FileExists => File.Exists(FilePath);
 
     /// <summary>
+    /// Gets the file name of the downloaded asset.
+    /// </summary>
+    public string FileName => Path.GetFileName(FilePath);
+
+    /// <summary>
+    /// Gets the file name without extension of the downloaded asset.
+    /// </summary>
+    public string FileNameNoExt => Path.GetFileNameWithoutExtension(FilePath);
+
+    /// <summary>
+    /// Gets the file extension of the downloaded asset.
+    /// </summary>
+    public string FileExtension => Path.GetExtension(FilePath);
+
+    /// <summary>
     /// Perform a safe <see cref="FilePath"/> file deletion.
     /// </summary>
-    public void SafeFileDelete()
+    public void SafeDeleteFile()
     {
         if (!FileExists) return;
         try

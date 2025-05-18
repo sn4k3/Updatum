@@ -239,10 +239,10 @@ Do you want to install the update? (y/yes/n/no)
 
 
 ```csharp
-// Create an instance of Updatum, keep it global and single instance.
+// Create an instance of UpdatumManager, keep it global and single instance.
 // By default it will fetch your current version from Assembly.GetEntryAssembly().GetName().Version
 // If you want to be safe and strict pass the current version, you can set 3rd argument as: Assembly.GetExecutingAssembly().GetName().Version
-internal static readonly Updatum AppUpdater = new("sn4k3", "UVtools")
+internal static readonly UpdatumManager AppUpdater = new("sn4k3", "UVtools")
 {
     InstallUpdateWindowsInstallerArguments = "/qb" // Displays a basic user interface for MSI package
 };
@@ -353,7 +353,7 @@ If you require to listen for the download progress or redirect the value, you ca
 ```csharp
 private static void AppUpdaterOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
 {
-    if (e.PropertyName == nameof(Updatum.DownloadedPercentage))
+    if (e.PropertyName == nameof(UpdatumManager.DownloadedPercentage))
     {
         Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadTotalSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
     }

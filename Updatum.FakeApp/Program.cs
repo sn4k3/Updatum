@@ -7,7 +7,7 @@ namespace Updatum.FakeApp;
 internal class Program
 {
     // https://github.com/sn4k3/UVtools/releases
-    internal static readonly Updatum AppUpdater = new("sn4k3", "UVtools", new Version(5, 0, 0))
+    internal static readonly UpdatumManager AppUpdater = new("sn4k3", "UVtools")
     {
         // Regex filter to get the correct asset from running system
         // Defaults would work here too: EntryApplication.GenericRuntimeIdentifier
@@ -105,11 +105,11 @@ internal class Program
 
     private static void AppUpdaterOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(Updatum.State))
+        if (e.PropertyName == nameof(UpdatumManager.State))
         {
             Console.WriteLine($"Updater state changed: {AppUpdater.State}");
         }
-        else if (e.PropertyName == nameof(Updatum.DownloadedPercentage))
+        else if (e.PropertyName == nameof(UpdatumManager.DownloadedPercentage))
         {
             Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
         }

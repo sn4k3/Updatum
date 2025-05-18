@@ -23,7 +23,7 @@ namespace Updatum;
 /// <summary>
 /// Represents the Updatum class.
 /// </summary>
-public partial class Updatum : INotifyPropertyChanged
+public partial class UpdatumManager : INotifyPropertyChanged
 {
     #region Events
     /// <summary>
@@ -70,6 +70,11 @@ public partial class Updatum : INotifyPropertyChanged
     #region Constants
 
     /// <summary>
+    /// The URL of the GitHub homepage.
+    /// </summary>
+    private const string GitHubUrl = "https://github.com";
+
+    /// <summary>
     /// Token to prevent app from rerun after upgrade.
     /// </summary>
     public const string NoRunAfterUpgradeToken = "$NORUN!";
@@ -85,6 +90,11 @@ public partial class Updatum : INotifyPropertyChanged
     private const string LinuxAppImageFileExtension = ".AppImage";
 
     /// <summary>
+    /// Default file extension for Linux flatpak files.
+    /// </summary>
+    private const string LinuxFlatpakFileExtension = ".flatpak";
+
+    /// <summary>
     /// Default file extension for windows installers.
     /// </summary>
     private static string[] WindowsInstallerFileExtensions => [".msi", ".exe"];
@@ -94,7 +104,7 @@ public partial class Updatum : INotifyPropertyChanged
     #region Static Properties
 
     /// <summary>
-    /// Gets the current version of this library (<see cref="Updatum"/>).
+    /// Gets the current version of this library (<see cref="UpdatumManager"/>).
     /// </summary>
     public static Version LibraryVersion => Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
 
@@ -122,7 +132,7 @@ public partial class Updatum : INotifyPropertyChanged
         {
             UserAgent =
             {
-                new ProductInfoHeaderValue(EntryApplication.AssemblyName ?? nameof(Updatum), EntryAssemblyVersion.ToString())
+                new ProductInfoHeaderValue(EntryApplication.AssemblyName ?? nameof(UpdatumManager), EntryAssemblyVersion.ToString())
             }
         }
     };
@@ -152,7 +162,7 @@ public partial class Updatum : INotifyPropertyChanged
     /// <summary>
     /// Gets the GitHub client used to access the GitHub API.
     /// </summary>
-    public GitHubClient GithubClient { get; } = new(new Octokit.ProductHeaderValue(EntryApplication.AssemblyName ?? nameof(Updatum), EntryAssemblyVersion.ToString()));
+    public GitHubClient GithubClient { get; } = new(new Octokit.ProductHeaderValue(EntryApplication.AssemblyName ?? nameof(UpdatumManager), EntryAssemblyVersion.ToString()));
 
     /// <summary>
     /// Gets the auto updater timer. Use this to start or stop the timer for your timed auto checks.
@@ -181,14 +191,19 @@ public partial class Updatum : INotifyPropertyChanged
     public Version CurrentVersion { get; init; } = EntryAssemblyVersion;
 
     /// <summary>
-    /// The owner of the repository.
+    /// Gets the owner of the repository.
     /// </summary>
     public required string Owner { get; init; }
 
     /// <summary>
-    /// The name of the repository.
+    /// Gets the name of the repository.
     /// </summary>
     public required string Repository { get; init; }
+
+    /// <summary>
+    /// Gets the full GitHub repository URL.
+    /// </summary>
+    public string RepositoryUrl => $"{GitHubUrl}/{Owner}/{Repository}";
 
     /// <summary>
     /// Gets or sets whatever to fetch only the latest release or all releases.
@@ -424,9 +439,11 @@ public partial class Updatum : INotifyPropertyChanged
 
     #region Constructor
     /// <summary>
-    /// Initializes a new instance of the <see cref="Updatum"/> class.
+    /// Initializes a new instance of the <see cref="UpdatumManager"/> class and try to infer the <see cref="Owner"/> and <see cref="Repository"/> from RepositoryUrl from the assembly metadata.
     /// </summary>
-    public Updatum()
+    /// <remarks>Warning: Only use this constructor when the RepositoryUrl is well-defined on your entry assembly, or it will throw exceptions.</remarks>
+    /// <exception cref="InvalidOperationException">When unable to infer from the RepositoryUrl.</exception>
+    public UpdatumManager()
     {
         if (!string.IsNullOrWhiteSpace(_assetRegexPattern))
         {
@@ -435,19 +452,58 @@ public partial class Updatum : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Updatum"/> class with the specified parameters.
+    /// Initializes a new instance of the <see cref="UpdatumManager"/> class with the specified parameters.
+    /// </summary>
+    /// <param name="repositoryUrl">The full GitHub repository url, must starts with: https://github.com/, if null or empty it will try to infer from the assembly RepositoryUrl metadata.</param>
+    /// <param name="currentVersion">Your app version that is current running, if <c>null</c>, it will fetch the version from EntryAssembly.</param>
+    /// <param name="gitHubCredentials">Pass the GitHub credentials if required, for extra tokens or visibility.</param>
+    /// <exception cref="ArgumentException">When unable to infer from the <paramref name="repositoryUrl"/>.</exception>
+    [SetsRequiredMembers]
+    public UpdatumManager(string? repositoryUrl, Version? currentVersion = null, Credentials? gitHubCredentials = null) : this()
+    {
+        if (string.IsNullOrWhiteSpace(repositoryUrl)) repositoryUrl = EntryApplication.AssemblyRepositoryUrl;
+
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+        {
+            throw new ArgumentNullException(nameof(repositoryUrl), "Unable to infer from the RepositoryUrl, maybe missing from assembly metadata.");
+        }
+
+        if (!repositoryUrl.StartsWith(GitHubUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"Unable to infer from the url, expecting to start with: <{GitHubUrl}>, got <{repositoryUrl}>.", nameof(repositoryUrl));
+        }
+
+        var match = Regex.Match(repositoryUrl, @$"{Regex.Escape(GitHubUrl)}\/([a-zA-Z0-9-]+)\/([a-zA-Z\d\-_.]+)", RegexOptions.IgnoreCase);
+        if (!match.Success)
+        {
+            throw new ArgumentException("Unable to infer from the url, regex failed to acquire owner/repo.", nameof(repositoryUrl));
+        }
+
+        if (match.Groups.Count < 3)
+        {
+            throw new ArgumentException($"Unable to infer from the url, regex failed to acquire the groups, expecting >=3, got {match.Groups.Count}.", nameof(repositoryUrl));
+        }
+
+        if (currentVersion is not null) CurrentVersion = currentVersion;
+        if (gitHubCredentials is not null) GithubClient.Credentials = gitHubCredentials;
+        Owner = match.Groups[1].Value;
+        Repository = match.Groups[2].Value;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UpdatumManager"/> class with the specified parameters.
     /// </summary>
     /// <param name="owner">The repository owner</param>
     /// <param name="repository">The repository name</param>
     /// <param name="currentVersion">Your app version that is current running, if <c>null</c>, it will fetch the version from EntryAssembly.</param>
     /// <param name="gitHubCredentials">Pass the GitHub credentials if required, for extra tokens or visibility.</param>
     [SetsRequiredMembers]
-    public Updatum(string owner, string repository, Version? currentVersion = null, Credentials? gitHubCredentials = null) : this()
+    public UpdatumManager(string owner, string repository, Version? currentVersion = null, Credentials? gitHubCredentials = null) : this()
     {
-        Owner = owner;
-        Repository = repository;
         if (currentVersion is not null) CurrentVersion = currentVersion;
         if (gitHubCredentials is not null) GithubClient.Credentials = gitHubCredentials;
+        Owner = owner;
+        Repository = repository;
     }
     #endregion
 
@@ -808,7 +864,7 @@ public partial class Updatum : INotifyPropertyChanged
 
                             using (var stream = File.CreateText(upgradeScriptFilePath))
                             {
-                                stream.WriteLine($"REM Autogenerated by {nameof(Updatum)} v{LibraryVersion.ToString(3)}");
+                                stream.WriteLine($"REM Autogenerated by {nameof(UpdatumManager)} v{LibraryVersion.ToString(3)}");
                                 stream.WriteLine($"REM {EntryApplication.AssemblyName} upgrade script");
                                 stream.WriteLine("@echo off");
                                 stream.WriteLine("setlocal enabledelayedexpansion");
@@ -998,7 +1054,7 @@ public partial class Updatum : INotifyPropertyChanged
 
                                 // Shebang line
                                 stream.WriteLine("#!/bin/bash");
-                                stream.WriteLine($"# Autogenerated by {nameof(Updatum)} v{LibraryVersion.ToString(3)}");
+                                stream.WriteLine($"# Autogenerated by {nameof(UpdatumManager)} v{LibraryVersion.ToString(3)}");
                                 stream.WriteLine($"# {EntryApplication.AssemblyName} upgrade script");
                                 stream.WriteLine($"echo \"{EntryApplication.AssemblyName} v{currentVersion} -> {newVersionStr} updater script\"");
                                 stream.WriteLine();
@@ -1219,11 +1275,12 @@ public partial class Updatum : INotifyPropertyChanged
                     )
                 {
                     if (fileExtension == string.Empty && OperatingSystem.IsWindows())
-                        throw new NotSupportedException("This file type is only supported on Unix systems.");
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Unix systems.");
                     if (fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsWindows())
-                        throw new NotSupportedException("This file type is only supported on Windows.");
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
                     if (fileExtension.Equals(LinuxAppImageFileExtension, StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsLinux())
-                        throw new NotSupportedException("This file type is only supported on Linux.");
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Linux.");
+
 
                     var currentExecutablePath = EntryApplication.ExecutablePath;
                     var targetDirectoryPath = EntryApplication.BaseDirectory;
@@ -1293,13 +1350,41 @@ public partial class Updatum : INotifyPropertyChanged
                     return true;
                 }
 
+                ////////////////////////////////
+                // Handle Linux flatpak files //
+                ////////////////////////////////
+                if (fileExtension.Equals(LinuxFlatpakFileExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!OperatingSystem.IsLinux()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Linux.");
+
+                    if (!File.Exists("/usr/bin/flatpak")) throw new FileNotFoundException("Flatpak is not installed on this system.", "/usr/bin/flatpak");
+
+                    // Update or install the Flatpak package
+                    var exitCode = Utilities.StartProcess("/usr/bin/flatpak", $"--user install --or-update --noninteractive \"{filePath}\"", true, 60 * 1000);
+                    if (exitCode != 0) throw new IOException($"Flatpak installation failed with error code: {exitCode}.");
+
+                    // Start the Flatpak application
+                    var flatpakName = fileNameNoExt;
+                    if (EntryApplication.IsLinuxFlatpak)
+                    {
+                        flatpakName = Path.GetFileNameWithoutExtension(EntryApplication.LinuxFlatpakPath);
+                    }
+
+                    InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                    Utilities.StartProcess("/usr/bin/flatpak", $"run {flatpakName}");
+
+                    // Exit the application
+                    Environment.Exit(0);
+                    return true;
+                }
+
 
                 ////////////////////////
                 // Windows Installers //
                 ////////////////////////
                 if (WindowsInstallerFileExtensions.Contains(fileExtension, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!OperatingSystem.IsWindows()) throw new NotSupportedException("This file type is only supported on Windows.");
+                    if (!OperatingSystem.IsWindows()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
                     Utilities.StartProcess(filePath, InstallUpdateWindowsInstallerArguments);
 
                     InstallUpdateCompleted?.Invoke(this, downloadedAsset);

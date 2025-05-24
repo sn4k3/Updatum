@@ -7,6 +7,7 @@ on:
         description: 'Perform a dry run (pack only, no push or release)'
         required: false
         default: true
+        type: boolean
 
 env:
    NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}

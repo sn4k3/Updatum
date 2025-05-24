@@ -57,7 +57,7 @@ jobs:
           echo "Looking for version: $version"
 
           # Create pattern that matches your exact format (with spaces around version)
-          version_pattern="^# ${version//./\\.} \([0-9]{2}\/[0-9]{2}\/[0-9]{4}\)$"
+          version_pattern="^# v?${version//./\\.} \([0-9]{2}\/[0-9]{2}\/[0-9]{4}\)$"
           echo "Using pattern: '$version_pattern'"
 
           # Debug: Show matching lines
@@ -65,7 +65,7 @@ jobs:
           grep -n "$version_pattern" CHANGELOG.md || echo "No matches found"
 
           # Find the line number of our version header
-          start_line=$(grep -n "$version_pattern" CHANGELOG.md | cut -d: -f1)
+          start_line=$(grep -En "$version_pattern" CHANGELOG.md | cut -d: -f1)
 
           if [ -z "$start_line" ]; then
             echo "::error::Could not find version $version in CHANGELOG.md"
@@ -76,7 +76,7 @@ jobs:
           fi
 
           # Find the line number of the next version header
-          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -n -m 1 "^# [0-9]\+\.[0-9]\+\.[0-9]\+ " | cut -d: -f1)
+          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -En -m 1 "^# v?[0-9]+\.[0-9]+\.[0-9]+" | cut -d: -f1)
 
           if [ -z "$next_version_line" ]; then
             # If no next version found, take until end of file

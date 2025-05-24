@@ -60,8 +60,19 @@ jobs:
         id: parse_changelog
         run: |
           version=${{ env.Version }}
-          changelog=$(awk "/^# $version /,/^# /{if (!/^# $version /) print}" CHANGELOG.md | sed '$d')
-          echo "Changelog=$changelog" >> $GITHUB_ENV
+          # Escape dots in version for regex (1.1.1 -> 1\.1\.1)
+          escaped_version=$(echo "$version" | sed 's/\./\\./g')
+          # Extract content between version header (with date) and next version header
+          changelog=$(awk "/^# $escaped_version /,/^# [0-9]+\.[0-9]+\.[0-9]+ /{if (!/^# $escaped_version / && !/^# [0-9]+\.[0-9]+\.[0-9]+ /) print}" CHANGELOG.md | sed '$d')
+          # Trim empty lines from start and end
+          changelog=$(echo "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+          if [ -z "$changelog" ]; then
+            echo "::error::No changelog found for version $version"
+            exit 1
+          fi
+          echo "Changelog<<EOF" >> $GITHUB_ENV
+          echo "$changelog" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
           echo "Parsed changelog for version $version"
           echo "$changelog"
 
@@ -70,13 +81,9 @@ jobs:
         run: |
           dotnet pack Updatum --configuration Release --output .
 
-      # 🛑 Conditional: Skip push and release if dry run
-      - name: 🛑 Check dry run
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: echo "Dry run enabled. Skipping push and release." && exit 0
-
       # 🏷️ Create a Git tag
       - name: 🏷️ Create Git tag
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -85,20 +92,28 @@ jobs:
 
       # 🚀 Push to nuget.org
       - name: 🚀 Push nuget.org
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: dotnet nuget push *.nupkg --source https://api.nuget.org/v3/index.json --api-key ${NUGET_TOKEN} --skip-duplicate
 
       # 🚀 Push to GitHub Packages
       - name: 🚀 Push Github
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: dotnet nuget push *.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ github.token }} --skip-duplicate
 
       # 📝 Create GitHub release
       - name: 📝 Create GitHub release
-        uses: actions/create-release@v1
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        uses: actions/create-release@v2
         with:
           tag_name: "v${{ env.Version }}"
           release_name: "v${{ env.Version }}"
           body: ${{ env.Changelog }}
           draft: false
-          prerelease: ${{ contains(env.Version, '-alpha') || contains(env.Version, '-beta') || contains(env.Version, '-preview') || contains(env.Version, '-rc')  }}
+          prerelease: ${{ contains(env.Version, '-alpha') || contains(env.Version, '-beta') || contains(env.Version, '-preview') || contains(env.Version, '-rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Show dry run message if enabled
+      - name: 🛑 Dry run notice
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: echo "Dry run completed. Package was built but not published."

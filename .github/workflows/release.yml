@@ -60,19 +60,32 @@ jobs:
         id: parse_changelog
         run: |
           version=${{ env.Version }}
-          # Escape dots in version for regex (1.1.1 -> 1\.1\.1)
-          escaped_version=$(echo "$version" | sed 's/\./\\./g')
-          # Extract content between version header (with date) and next version header
-          changelog=$(awk "/^# $escaped_version /,/^# [0-9]+\.[0-9]+\.[0-9]+ /{if (!/^# $escaped_version / && !/^# [0-9]+\.[0-9]+\.[0-9]+ /) print}" CHANGELOG.md | sed '$d')
-          # Trim empty lines from start and end
-          changelog=$(echo "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+
+          # Match both formats: "# 1.1.0" and "# v1.1.0"
+          CHANGELOG_CONTENT=$(awk -v version="$version" '
+            BEGIN { print=0 }
+            /^# (v)?'"${version}"' / {
+              print=1; next
+            }
+            /^# (v)?[0-9]+\.[0-9]+\.[0-9]+ / {
+              if (print) exit
+            }
+            print { print }
+          ' CHANGELOG.md)
+
+          # Escape for GitHub output
+          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//'%'/'%25'}"
+          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\n'/'%0A'}"
+          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\r'/'%0D'}"
+
+          echo "changelog=${CHANGELOG_CONTENT}" >> $GITHUB_ENV
+
           if [ -z "$changelog" ]; then
             echo "::error::No changelog found for version $version"
             exit 1
           fi
-          echo "Changelog<<EOF" >> $GITHUB_ENV
-          echo "$changelog" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+
           echo "Parsed changelog for version $version"
           echo "$changelog"
 

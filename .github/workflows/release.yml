@@ -40,7 +40,7 @@ jobs:
           version=$(echo "$version" | sed "s/\$(AssemblyVersion)/$assemblyVersion/g")
 
           # Ensure version is valid
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$ ]]; then
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.?[0-9]+)?)?$ ]]; then
             echo "::error::Invalid version format in Directory.Build.props: $VERSION"
             exit 1
           fi
@@ -56,37 +56,37 @@ jobs:
           version=${{ env.Version }}
           echo "Looking for version: $version"
 
-          # Create pattern that matches your exact format (with spaces around version)
-          version_pattern="^# v?${version//./\\.} \([0-9]{2}\/[0-9]{2}\/[0-9]{4}\)$"
+          # Create pattern that matches:
+          # - Normal versions: # v1.1.1 (24/05/2025)
+          # - Prerelease versions: # v1.1.1-beta.1 (24/05/2025) or # v1.1.1-rc (24/05/2025)
+          version_pattern="^# v?${version//./\\.}(-[a-zA-Z]+(\.?[0-9]+)?)? \([0-9]{2}/[0-9]{2}/[0-9]{4}\)$"
           echo "Using pattern: '$version_pattern'"
 
           # Debug: Show matching lines
           echo "Matching lines in CHANGELOG.md:"
-          grep -n "$version_pattern" CHANGELOG.md || echo "No matches found"
+          grep -En "$version_pattern" CHANGELOG.md || echo "No matches found"
 
-          # Find the line number of our version header
+          # Find the line number using extended regex
           start_line=$(grep -En "$version_pattern" CHANGELOG.md | cut -d: -f1)
 
           if [ -z "$start_line" ]; then
             echo "::error::Could not find version $version in CHANGELOG.md"
-            echo "::error::Tried pattern: $version_pattern"
-            echo "::error::First few lines of CHANGELOG.md:"
+            echo "First few lines of CHANGELOG.md:"
             head -n 5 CHANGELOG.md
             exit 1
           fi
 
-          # Find the line number of the next version header
-          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -En -m 1 "^# v?[0-9]+\.[0-9]+\.[0-9]+" | cut -d: -f1)
+          # Find next version header (with prerelease support)
+          next_version_pattern="^# v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z]+(\.[0-9]+)?)? "
+          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -En -m 1 "$next_version_pattern" | cut -d: -f1)
 
           if [ -z "$next_version_line" ]; then
-            # If no next version found, take until end of file
             changelog=$(tail -n +$((start_line+1)) CHANGELOG.md)
           else
-            # Otherwise take until the next version
             changelog=$(tail -n +$((start_line+1)) CHANGELOG.md | head -n $((next_version_line-1)))
           fi
 
-          # Clean up the changelog content (remove empty lines at start/end)
+          # Clean up the changelog content
           changelog=$(echo "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
 
           if [ -z "$changelog" ]; then
@@ -94,7 +94,6 @@ jobs:
             exit 1
           fi
 
-          # For debugging
           echo "Extracted changelog content:"
           echo "---"
           echo "$changelog"

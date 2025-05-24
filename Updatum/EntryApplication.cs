@@ -22,8 +22,8 @@ public static class EntryApplication
     /// </summary>
     public static string GenericRuntimeIdentifier =>
         OperatingSystem.IsWindows() ? $"win-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
-        OperatingSystem.IsMacOS() ? $"osx-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
-        OperatingSystem.IsLinux() ? $"linux-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
+        OperatingSystem.IsMacOS()   ? $"osx-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
+        OperatingSystem.IsLinux()   ? $"linux-{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}" :
         RuntimeInformation.RuntimeIdentifier;
 
     /// <summary>
@@ -97,6 +97,24 @@ public static class EntryApplication
     /// <example>1.0.0.0</example>
     public static Version? AssemblyVersion => Assembly.GetEntryAssembly()?.GetName().Version;
 
+    private static readonly Lazy<string?> AssemblyVersionStringLazy = new(() =>
+    {
+        var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version
+                      ?? AssemblyInformationalVersion
+                      ?? AssemblyVersion?.ToString();
+        if (version is null) return null;
+        var indexOf = version.IndexOf('+');
+        return indexOf <= 0
+            ? version
+            : version[..indexOf]; // If the version contains a commit hash, we only return the version part
+    });
+
+    /// <summary>
+    /// Gets the entry assembly version, as specified by the <see cref="AssemblyVersionAttribute"/>, if null, fallbacks to the <see cref="AssemblyInformationalVersion"/>, but without the commit hash if present.
+    /// </summary>
+    /// <example>1.0.0-dev</example>
+    public static string? AssemblyVersionString => AssemblyVersionStringLazy.Value;
+
     /// <summary>
     /// Gets the file version of the entry assembly, as specified by the <see cref="AssemblyFileVersionAttribute"/>.
     /// </summary>
@@ -117,7 +135,7 @@ public static class EntryApplication
     /// <summary>
     /// Gets the application bundle type.
     /// </summary>
-    public static readonly ApplicationBundleType BundleType;
+    public static ApplicationBundleType BundleType { get; }
 
     /// <summary>
     /// Checks if the application is running under a bundled application.<br/>
@@ -148,7 +166,7 @@ public static class EntryApplication
     /// <summary>
     /// Gets the path to the running application if is a single-file app.
     /// </summary>
-    public static readonly string? DotNetSingleFileAppPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
+    public static string? DotNetSingleFileAppPath { get; } = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
 
     /// <summary>
     /// Checks if the application is running under a single-file app.
@@ -159,7 +177,7 @@ public static class EntryApplication
     /// <summary>
     /// Gets the path to the running linux application image (AppImage).
     /// </summary>
-    public static readonly string? LinuxAppImagePath = OperatingSystem.IsLinux() ? Environment.GetEnvironmentVariable("APPIMAGE") : null;
+    public static string? LinuxAppImagePath { get; } = OperatingSystem.IsLinux() ? Environment.GetEnvironmentVariable("APPIMAGE") : null;
 
     /// <summary>
     /// Checks if the application is running under linux application image (AppImage).
@@ -170,7 +188,7 @@ public static class EntryApplication
     /// <summary>
     /// Gets the path to the running linux flatpak.
     /// </summary>
-    public static readonly string? LinuxFlatpakPath = OperatingSystem.IsLinux() ? Environment.GetEnvironmentVariable("container") : null;
+    public static string? LinuxFlatpakPath { get; } = OperatingSystem.IsLinux() ? Environment.GetEnvironmentVariable("container") : null;
 
     /// <summary>
     /// Checks if the application is running under linux flatpak.
@@ -182,7 +200,7 @@ public static class EntryApplication
     /// <summary>
     /// Gets the path to the running macOS application bundle if is a macOS app bundle.
     /// </summary>
-    public static readonly string? MacOSAppBundlePath;
+    public static string? MacOSAppBundlePath { get; }
 
     /// <summary>
     /// Checks if the application is running under a macOS app bundle.
@@ -203,7 +221,7 @@ public static class EntryApplication
     /// It's expected to be different from <see cref="Environment.ProcessPath"/> in some cases.<br/>
     /// Example: The MyApp.AppImage, MyApp.app will be returned instead of the app executable.<br/>
     /// If running from dotnet, it will return the AssemblyLocation, eg: myapp.dll.</remarks>
-    public static readonly string? ExecutablePath;
+    public static string? ExecutablePath { get; }
 
     /// <summary>
     /// Gets the file name of the entry executable of the running application.
@@ -327,6 +345,7 @@ public static class EntryApplication
         sb.AppendLine($"{nameof(AssemblyRepositoryUrl)}: {AssemblyRepositoryUrl}");
         sb.AppendLine($"{nameof(AssemblyLocation)}: {AssemblyLocation}");
         sb.AppendLine($"{nameof(AssemblyVersion)}: {AssemblyVersion}");
+        sb.AppendLine($"{nameof(AssemblyVersionString)}: {AssemblyVersionString}");
         sb.AppendLine($"{nameof(AssemblyFileVersion)}: {AssemblyFileVersion}");
         sb.AppendLine($"{nameof(AssemblyInformationalVersion)}: {AssemblyInformationalVersion}");
         sb.AppendLine($"{nameof(ProcessName)}: {ProcessName}");

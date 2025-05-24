@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace Updatum.FakeApp;
@@ -32,6 +33,7 @@ internal class Program
             AppUpdater.AssetExtensionFilter = ".AppImage"; // Force AppImage because zip also available on assets
         }
 
+        Debug.WriteLine(EntryApplication.ToString());
         Console.WriteLine(EntryApplication.ToString());
 
         AppUpdater.PropertyChanged += AppUpdaterOnPropertyChanged;

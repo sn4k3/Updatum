@@ -1129,7 +1129,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                     if (InstallUpdateCodesignMacOSApp)
                                     {
                                         stream.WriteLine("echo \"- Force codesign to allow the app to run directly\"");
-                                        stream.WriteLine("find \"$SOURCE_PATH\" -maxdepth 1 -type d -name \"*.app\" -print0 | xargs -0 -I {} codesign --force --sign - \"{}\"");
+                                        stream.WriteLine("find \"$SOURCE_PATH\" -maxdepth 1 -type d -name \"*.app\" -print0 | xargs -0 -I {} codesign --force --deep --sign - \"{}\"");
                                         stream.WriteLine();
                                     }
                                 }

@@ -1,11 +1,14 @@
-name: Nuget package publish
+name: 📦 Nuget package publish
 
 on:
-  release:
-    types: [released]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Perform a dry run (pack only, no push or release)'
+        required: false
+        default: true
 
 env:
-   VERSION: ${{ github.ref_name }}
    NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
 
 jobs:
@@ -18,20 +21,72 @@ jobs:
       contents: write
       packages: write
     steps:
+      # 🛒 Checkout the repository
       - name: 🛒 Checkout
         uses: actions/checkout@v4
 
+      # 🟣 Setup .NET
       - name: 🟣 Setup .NET 9.0
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 9.0.x
 
+      # 🔍 Extract Version from Directory.Build.props
+      - name: 🔍 Extract Version
+        id: extract_version
+        run: |
+          assemblyVersion=$(xmllint --xpath "string(//AssemblyVersion)" Directory.Build.props)
+          version=$(xmllint --xpath "string(//Version)" Directory.Build.props)
+
+          # Replace $(AssemblyVersion) in version with the value of assemblyVersion
+          version=$(echo "$version" | sed "s/\$(AssemblyVersion)/$assemblyVersion/g")
+
+          echo "Version=$version" >> $GITHUB_ENV
+          echo "Extracted and Resolved Version: $version"
+
+      # 📝 Parse changelog for the version
+      - name: 📝 Parse changelog
+        id: parse_changelog
+        run: |
+          version=${{ env.Version }}
+          changelog=$(awk "/^# $version /,/^# /{if (!/^# $version /) print}" CHANGELOG.md | sed '$d')
+          echo "Changelog=$changelog" >> $GITHUB_ENV
+          echo "Parsed changelog for version $version"
+
+      # 📦 Pack the project
       - name: 📦 Pack
         run: |
-          dotnet pack Updatum --configuration Release --output . -p:Version=${{ env.VERSION }}
+          dotnet pack Updatum --configuration Release --output .
 
+      # 🛑 Conditional: Skip push and release if dry run
+      - name: 🛑 Check dry run
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: echo "Dry run enabled. Skipping push and release." && exit 0
+
+      # 🏷️ Create a Git tag
+      - name: 🏷️ Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ env.Version }}" -m "Release v${{ env.Version }}"
+          git push origin "v${{ env.Version }}"
+
+      # 🚀 Push to nuget.org
       - name: 🚀 Push nuget.org
         run: dotnet nuget push *.nupkg --source https://api.nuget.org/v3/index.json --api-key ${NUGET_TOKEN} --skip-duplicate
 
+      # 🚀 Push to GitHub Packages
       - name: 🚀 Push Github
         run: dotnet nuget push *.nupkg --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --api-key ${{ github.token }} --skip-duplicate
+
+      # 📝 Create GitHub release
+      - name: 📝 Create GitHub release
+        uses: actions/create-release@v1
+        with:
+          tag_name: "v${{ env.Version }}"
+          release_name: "v${{ env.Version }}"
+          body: ${{ env.Changelog }}
+          draft: false
+          prerelease: ${{ contains(env.Version, '-alpha') || contains(env.Version, '-beta') || contains(env.Version, '-preview') || contains(env.Version, '-rc')  }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

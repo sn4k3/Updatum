@@ -103,10 +103,10 @@ jobs:
       # 📝 Create GitHub release
       - name: 📝 Create GitHub release
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        uses: actions/create-release@v2
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ env.Version }}"
-          release_name: "v${{ env.Version }}"
+          name: "v${{ env.Version }}"
           body: ${{ env.Changelog }}
           draft: false
           prerelease: ${{ contains(env.Version, '-alpha') || contains(env.Version, '-beta') || contains(env.Version, '-preview') || contains(env.Version, '-rc') }}

@@ -26,12 +26,6 @@ jobs:
       - name: 🛒 Checkout
         uses: actions/checkout@v4
 
-      # 🟣 Setup .NET
-      - name: 🟣 Setup .NET 9.0
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: 9.0.x
-
       # 🔍 Extract Version from Directory.Build.props
       - name: 🔍 Extract Version
         id: extract_version
@@ -62,20 +56,27 @@ jobs:
           version=${{ env.Version }}
           echo "Looking for version: $version"
 
-          # Create proper regex pattern (escape dots and handle date format)
-          version_pattern="^# ${version//./\\.} \\([0-9]{2}/[0-9]{2}/[0-9]{4}\\)$"
+          # Create pattern that matches your exact format (with spaces around version)
+          version_pattern="^# ${version//./\\.} \([0-9]{2}\/[0-9]{2}\/[0-9]{4}\)$"
           echo "Using pattern: '$version_pattern'"
+
+          # Debug: Show matching lines
+          echo "Matching lines in CHANGELOG.md:"
+          grep -n "$version_pattern" CHANGELOG.md || echo "No matches found"
 
           # Find the line number of our version header
           start_line=$(grep -n "$version_pattern" CHANGELOG.md | cut -d: -f1)
 
           if [ -z "$start_line" ]; then
             echo "::error::Could not find version $version in CHANGELOG.md"
+            echo "::error::Tried pattern: $version_pattern"
+            echo "::error::First few lines of CHANGELOG.md:"
+            head -n 5 CHANGELOG.md
             exit 1
           fi
 
           # Find the line number of the next version header
-          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -n -m 1 "^# [0-9]+\.[0-9]+\.[0-9]+ " | cut -d: -f1)
+          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -n -m 1 "^# [0-9]\+\.[0-9]\+\.[0-9]\+ " | cut -d: -f1)
 
           if [ -z "$next_version_line" ]; then
             # If no next version found, take until end of file
@@ -85,7 +86,7 @@ jobs:
             changelog=$(tail -n +$((start_line+1)) CHANGELOG.md | head -n $((next_version_line-1)))
           fi
 
-          # Clean up the changelog content
+          # Clean up the changelog content (remove empty lines at start/end)
           changelog=$(echo "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
 
           if [ -z "$changelog" ]; then
@@ -100,9 +101,16 @@ jobs:
           echo "---"
 
           # Use heredoc to properly handle multi-line content
-          echo "Changelog<<EOF" >> $GITHUB_ENV
+          delimiter="EOF_$(date +%s)"
+          echo "Changelog<<${delimiter}" >> $GITHUB_ENV
           echo "$changelog" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "${delimiter}" >> $GITHUB_ENV
+
+      # 🟣 Setup .NET
+      - name: 🟣 Setup .NET 9.0
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 9.0.x
 
       # 📦 Pack the project
       - name: 📦 Pack

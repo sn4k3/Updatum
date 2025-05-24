@@ -36,8 +36,11 @@ jobs:
       - name: 🔍 Extract Version
         id: extract_version
         run: |
-          assemblyVersion=$(xmllint --xpath "string(//AssemblyVersion)" Directory.Build.props)
-          version=$(xmllint --xpath "string(//Version)" Directory.Build.props)
+          # Extract AssemblyVersion
+          assemblyVersion=$(grep -oP '(?<=<AssemblyVersion>).*?(?=</AssemblyVersion>)' Directory.Build.props)
+
+          # Extract Version
+          version=$(grep -oP '(?<=<Version>).*?(?=</Version>)' Directory.Build.props)
 
           # Replace $(AssemblyVersion) in version with the value of assemblyVersion
           version=$(echo "$version" | sed "s/\$(AssemblyVersion)/$assemblyVersion/g")

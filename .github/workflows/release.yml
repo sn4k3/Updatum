@@ -60,34 +60,49 @@ jobs:
         id: parse_changelog
         run: |
           version=${{ env.Version }}
+          echo "Looking for version: $version"
 
+          # Create proper regex pattern (escape dots and handle date format)
+          version_pattern="^# ${version//./\\.} \\([0-9]{2}/[0-9]{2}/[0-9]{4}\\)$"
+          echo "Using pattern: '$version_pattern'"
 
-          # Match both formats: "# 1.1.0" and "# v1.1.0"
-          CHANGELOG_CONTENT=$(awk -v version="$version" '
-            BEGIN { print=0 }
-            /^# (v)?'"${version}"' / {
-              print=1; next
-            }
-            /^# (v)?[0-9]+\.[0-9]+\.[0-9]+ / {
-              if (print) exit
-            }
-            print { print }
-          ' CHANGELOG.md)
+          # Find the line number of our version header
+          start_line=$(grep -n "$version_pattern" CHANGELOG.md | cut -d: -f1)
 
-          # Escape for GitHub output
-          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//'%'/'%25'}"
-          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\n'/'%0A'}"
-          CHANGELOG_CONTENT="${CHANGELOG_CONTENT//$'\r'/'%0D'}"
-
-          echo "changelog=${CHANGELOG_CONTENT}" >> $GITHUB_ENV
-
-          if [ -z "$changelog" ]; then
-            echo "::error::No changelog found for version $version"
+          if [ -z "$start_line" ]; then
+            echo "::error::Could not find version $version in CHANGELOG.md"
             exit 1
           fi
 
-          echo "Parsed changelog for version $version"
+          # Find the line number of the next version header
+          next_version_line=$(tail -n +$((start_line+1)) CHANGELOG.md | grep -n -m 1 "^# [0-9]+\.[0-9]+\.[0-9]+ " | cut -d: -f1)
+
+          if [ -z "$next_version_line" ]; then
+            # If no next version found, take until end of file
+            changelog=$(tail -n +$((start_line+1)) CHANGELOG.md)
+          else
+            # Otherwise take until the next version
+            changelog=$(tail -n +$((start_line+1)) CHANGELOG.md | head -n $((next_version_line-1)))
+          fi
+
+          # Clean up the changelog content
+          changelog=$(echo "$changelog" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+          if [ -z "$changelog" ]; then
+            echo "::error::Empty changelog for version $version"
+            exit 1
+          fi
+
+          # For debugging
+          echo "Extracted changelog content:"
+          echo "---"
           echo "$changelog"
+          echo "---"
+
+          # Use heredoc to properly handle multi-line content
+          echo "Changelog<<EOF" >> $GITHUB_ENV
+          echo "$changelog" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       # 📦 Pack the project
       - name: 📦 Pack

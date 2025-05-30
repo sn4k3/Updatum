@@ -736,9 +736,11 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
             return download;
         }
-        catch (Exception)
+        catch
         {
+            DownloadedBytes = 0;
             State = UpdatumState.None;
+
             try
             {
                 // Delete the temporary if it exists

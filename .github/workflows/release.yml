@@ -30,14 +30,28 @@ jobs:
       - name: 🔍 Extract Version
         id: extract_version
         run: |
+          # Directory.Build.props
+          if [ ! -f 'Directory.Build.props' ]; then
+            echo "::error::Directory.Build.props file not found."
+            exit 1
+          fi
+
           # Extract AssemblyVersion
           assemblyVersion=$(grep -oP '(?<=<AssemblyVersion>).*?(?=</AssemblyVersion>)' Directory.Build.props)
 
           # Extract Version
           version=$(grep -oP '(?<=<Version>).*?(?=</Version>)' Directory.Build.props)
 
-          # Replace $(AssemblyVersion) in version with the value of assemblyVersion
-          version=$(echo "$version" | sed "s/\$(AssemblyVersion)/$assemblyVersion/g")
+
+          # If Version not found, use AssemblyVersion
+          if [ -z "$version" ]; then
+            version="$(assemblyVersion)"
+          fi
+
+          if [ ! -z "$assemblyVersion" ]; then
+            # Replace $(AssemblyVersion) in version with the value of assemblyVersion
+            version=$(echo "$version" | sed "s/\$(AssemblyVersion)/$assemblyVersion/g")
+          fi
 
           # Ensure version is valid
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.?[0-9]+)?)?$ ]]; then
@@ -113,8 +127,7 @@ jobs:
 
       # 📦 Pack the project
       - name: 📦 Pack
-        run: |
-          dotnet pack Updatum --configuration Release --output .
+        run: dotnet pack Updatum --configuration Release --output .
 
       # 🏷️ Create a Git tag
       - name: 🏷️ Create Git tag

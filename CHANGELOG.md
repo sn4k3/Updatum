@@ -1,3 +1,7 @@
+# v1.1.2 (24/05/2025)
+- Add `AssemblyAuthors` property
+- Sets the progress of `DownloadedBytes` to 0 when operation is cancelled (Fixes #4)
+
 # v1.1.1 (24/05/2025)
 - Improve the macOS codesign to add the `--deep` flag
 - Add `AssemblyVersionString` property

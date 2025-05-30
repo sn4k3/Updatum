@@ -11,7 +11,7 @@
         <Copyright>Copyright 2025-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
         <Description>Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using GitHub Releases.
 It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.</Description>
-        <AssemblyVersion>1.1.1</AssemblyVersion>
+        <AssemblyVersion>1.1.2</AssemblyVersion>
         <Version>$(AssemblyVersion)</Version>
 
         <!-- Package -->

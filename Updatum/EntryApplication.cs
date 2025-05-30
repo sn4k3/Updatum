@@ -81,6 +81,17 @@ public static class EntryApplication
     public static string? AssemblyTrademark => Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyTrademarkAttribute>()?.Trademark;
 
     /// <summary>
+    ///Gets the authors of the entry assembly, as specified by the <see cref="AssemblyMetadataAttribute"/> with key "Authors".
+    /// </summary>
+    /// <remarks>It must be included with:<br/>
+    /// &lt;ItemGroup&gt;<br/>
+    ///     &lt;AssemblyMetadata Include="Authors" Value="$(Authors)"/&gt;<br/>
+    /// &lt;/ItemGroup&gt;</remarks>
+    public static string? AssemblyAuthors => Assembly.GetExecutingAssembly()
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .FirstOrDefault(attribute => attribute.Key == "Authors")?.Value;
+
+    /// <summary>
     /// Gets the repository URL of the entry assembly, as specified by the <see cref="AssemblyMetadataAttribute"/>.
     /// </summary>
     /// <example>https://github.com/sn4k3/Updatum</example>

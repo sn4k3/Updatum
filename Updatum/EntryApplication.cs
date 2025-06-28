@@ -87,7 +87,7 @@ public static class EntryApplication
     /// &lt;ItemGroup&gt;<br/>
     ///     &lt;AssemblyMetadata Include="Authors" Value="$(Authors)"/&gt;<br/>
     /// &lt;/ItemGroup&gt;</remarks>
-    public static string? AssemblyAuthors => Assembly.GetExecutingAssembly()
+    public static string? AssemblyAuthors => Assembly.GetEntryAssembly()?
         .GetCustomAttributes<AssemblyMetadataAttribute>()
         .FirstOrDefault(attribute => attribute.Key == "Authors")?.Value;
 
@@ -353,6 +353,7 @@ public static class EntryApplication
         sb.AppendLine($"{nameof(AssemblyCopyright)}: {AssemblyCopyright}");
         sb.AppendLine($"{nameof(AssemblyCompany)}: {AssemblyCompany}");
         sb.AppendLine($"{nameof(AssemblyTrademark)}: {AssemblyTrademark}");
+        sb.AppendLine($"{nameof(AssemblyAuthors)}: {AssemblyAuthors}");
         sb.AppendLine($"{nameof(AssemblyRepositoryUrl)}: {AssemblyRepositoryUrl}");
         sb.AppendLine($"{nameof(AssemblyLocation)}: {AssemblyLocation}");
         sb.AppendLine($"{nameof(AssemblyVersion)}: {AssemblyVersion}");

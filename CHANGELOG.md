@@ -1,4 +1,7 @@
-# v1.1.2 (24/05/2025)
+# v1.1.3 (28/06/2025)
+- Fixes the `AssemblyAuthors` to use the correct entry assembly reference
+
+# v1.1.2 (30/05/2025)
 - Add `AssemblyAuthors` property
 - Sets the progress of `DownloadedBytes` to 0 when operation is cancelled (Fixes #4)
 

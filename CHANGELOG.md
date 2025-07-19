@@ -1,3 +1,13 @@
+# v1.1.5 (19/07/2025)
+- Improves the `InstallUpdate` for windows installers, by generating and run a upgrade batch script,
+which in the end calls the installer with the provided arguments (same as before),
+but also provides more validation checks, better process termination, custom script injection and cleanup
+- Improve the documentation for the `InstallUpdateCompleted` event
+- Fixes the `InstallUpdateCompleted` event being triggered after executing the installer on Windows, 
+when it should trigger before executing the installer
+- Fixes the auto upgrade bat script for windows which had a leftover `pause` in the end of the script, 
+which was causing the script to wait for user input before closing and then leaving the process open
+
 # v1.1.4 (19/07/2025)
 - Changes the `DownloadProgressUpdateFrequencySeconds` default from `0.5s` to `0.1s` to a more fluid progress update
 - Improve the accuracy of download progress frequency check by using `StopWatch.GetElapsedTime()` instead of `DateTime`

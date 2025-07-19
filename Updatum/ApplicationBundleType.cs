@@ -16,7 +16,7 @@ public enum ApplicationBundleType
     None,
 
     /// <summary>
-    /// The application is bundled as a dotnet single-file application.
+    /// The application is bundled as a dotnet single-file application (PublishSingleFile).
     /// </summary>
     DotNetSingleFile,
 

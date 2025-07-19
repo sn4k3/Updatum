@@ -24,15 +24,6 @@ internal class Program
 
     private static async Task Main()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            AppUpdater.AssetExtensionFilter = ".msi"; // Force installer because zip also available on assets
-        }
-        else if (OperatingSystem.IsLinux())
-        {
-            AppUpdater.AssetExtensionFilter = ".AppImage"; // Force AppImage because zip also available on assets
-        }
-
         Debug.WriteLine(EntryApplication.ToString());
         Console.WriteLine(EntryApplication.ToString());
 

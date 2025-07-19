@@ -175,12 +175,12 @@ public static class EntryApplication
     public static bool IsRunningFromDotNetProcess { get; }
 
     /// <summary>
-    /// Gets the path to the running application if is a single-file app.
+    /// Gets the path to the running application if is a single-file app (PublishSingleFile) bundled by dotnet.
     /// </summary>
     public static string? DotNetSingleFileAppPath { get; } = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
 
     /// <summary>
-    /// Checks if the application is running under a single-file app.
+    /// Checks if the application is running under a single-file app (PublishSingleFile) bundled by dotnet.
     /// </summary>
     [MemberNotNullWhen(true, nameof(DotNetSingleFileAppPath), nameof(ExecutablePath), nameof(ExecutableFileName), nameof(BaseDirectory))]
     public static bool IsDotNetSingleFileApp => !string.IsNullOrWhiteSpace(DotNetSingleFileAppPath);

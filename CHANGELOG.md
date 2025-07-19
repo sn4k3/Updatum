@@ -1,3 +1,17 @@
+# v1.1.4 (19/07/2025)
+- Changes the `DownloadProgressUpdateFrequencySeconds` default from `0.5s` to `0.1s` to a more fluid progress update
+- Improve the accuracy of download progress frequency check by using `StopWatch.GetElapsedTime()` instead of `DateTime`
+- Improve the `GetCompatibleReleaseAsset` method when found multiple matching assets, instead of return the very first,
+it will now try to infer based on `EntryApplication` bundle type, which now searches and defaults to:
+  - Windows: 
+    - `.exe` if running under single-file (`PublishSingleFile`)
+    - Otherwise, defaults to `.msi`
+  - Linux: 
+    - `AppImage` if running under AppImage
+    - `Flatpak` if running under Flatpak
+    - Otherwise, defaults to `.zip`
+  - If none of the above matches, it will fallback to the first matching asset
+
 # v1.1.3 (28/06/2025)
 - Fixes the `AssemblyAuthors` to use the correct entry assembly reference
 

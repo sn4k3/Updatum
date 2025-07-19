@@ -147,7 +147,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
     private string _assetRegexPattern = EntryApplication.GenericRuntimeIdentifier;
     private string? _assetExtensionFilter;
     private int _checkForUpdateCount;
-    private double _downloadProgressUpdateFrequencySeconds = 0.5;
+    private double _downloadProgressUpdateFrequencySeconds = 0.1; // 10 FPS
     private long _downloadSizeBytes = -1;
     private long _downloadedBytes;
     private string? _installUpdateWindowsInstallerArguments;
@@ -645,23 +645,79 @@ public partial class UpdatumManager : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets the correct and compatible <see cref="ReleaseAsset"/> for the running system.
+    /// Gets the correct and compatible <see cref="ReleaseAsset"/> for the running system and application type
+    /// based on the <see cref="AssetRegexPattern"/> and <see cref="AssetExtensionFilter"/>.<br/>
     /// </summary>
-    /// <param name="release"></param>
-    /// <returns>The <see cref="ReleaseAsset"/> for the current system, if not found, return <c>null</c>.</returns>
+    /// <param name="release">The release where you want to get the compatible asset.</param>
+    /// <remarks>
+    /// When multiple matching assets are found without providing <see cref="AssetExtensionFilter"/>,
+    /// it will try to infer based on `EntryApplication` bundle type, which searches and defaults to:<br/>
+    ///   - Windows:<br/>
+    ///     - <c>.exe</c> if running under single-file (`PublishSingleFile`)<br/>
+    ///     - Otherwise, defaults to <c>.msi</c><br/>
+    ///   - Linux:<br/>
+    ///     - <c>AppImage</c> if running under AppImage<br/>
+    ///     - <c>Flatpak</c> if running under Flatpak<br/>
+    ///     - Otherwise, defaults to <c>.zip</c><br/>
+    ///   - If none of the above matches, it will fallback to the first matching asset
+    /// </remarks>
+    /// <returns>The <see cref="ReleaseAsset"/> for the current system and app type, if not found, return <c>null</c>.</returns>
     public ReleaseAsset? GetCompatibleReleaseAsset(Release release)
     {
         if (release.Assets.Count == 0) return null;
         if (string.IsNullOrWhiteSpace(AssetRegexPattern) || AssetRegex is null) return release.Assets[0];
 
+        var candidateAssets = new List<ReleaseAsset>();
         foreach (var asset in release.Assets)
         {
             if (!AssetRegex.IsMatch(asset.Name)) continue;
             if (!string.IsNullOrWhiteSpace(AssetExtensionFilter) && !asset.Name.EndsWith(AssetExtensionFilter)) continue;
-            return asset;
+            candidateAssets.Add(asset);
         }
 
-        return null;
+        if (candidateAssets.Count == 0) return null;
+        if (candidateAssets.Count == 1) return candidateAssets[0];
+
+        // Multiple assets found, no extension filter is set, perform extra guess check.
+        // Try to infer the best asset based on EntryApplication bundle.
+        if (string.IsNullOrWhiteSpace(AssetExtensionFilter))
+        {
+            string? extension = null;
+
+            if (OperatingSystem.IsWindows())
+            {
+                if (EntryApplication.IsDotNetSingleFileApp)
+                {
+                    extension = ".exe";
+                }
+                else
+                {
+                    extension = ".msi"; // Default to MSI installer
+                }
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                if (EntryApplication.IsLinuxAppImage)
+                {
+                    extension = LinuxAppImageFileExtension;
+                }
+                else if (EntryApplication.IsLinuxFlatpak)
+                {
+                    extension = LinuxFlatpakFileExtension;
+                }
+                else
+                {
+                    extension = ".zip"; // Default to ZIP archive
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(extension))
+            {
+                return candidateAssets.FirstOrDefault(asset => asset.Name.EndsWith(extension), candidateAssets[0]);
+            }
+        }
+
+        return candidateAssets[0];
     }
 
     /// <summary>
@@ -714,17 +770,19 @@ public partial class UpdatumManager : INotifyPropertyChanged
                 var buffer = new byte[DefaultBufferSize];
                 long totalRead = 0;
                 int bytesRead;
-                var lastReportTime = DateTime.Now;
+                var lastReportTime = Stopwatch.GetTimestamp();
                 while ((bytesRead = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
                 {
                     await fileStream.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, bytesRead), cancellationToken);
                     totalRead += bytesRead;
 
                     // Display progress every x seconds or on final chunk
-                    if ((DateTime.Now - lastReportTime).TotalSeconds >= DownloadProgressUpdateFrequencySeconds || totalRead == totalBytes)
+                    var currentTimestamp = Stopwatch.GetTimestamp();
+                    var elapsedTimeSpan = Stopwatch.GetElapsedTime(lastReportTime, currentTimestamp);
+                    if (elapsedTimeSpan.TotalSeconds >= DownloadProgressUpdateFrequencySeconds || totalRead == totalBytes)
                     {
                         DownloadedBytes = totalRead;
-                        lastReportTime = DateTime.Now;
+                        lastReportTime = currentTimestamp;
                     }
                 }
             }

@@ -111,7 +111,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
     private static Version EntryAssemblyVersion => EntryApplication.AssemblyVersion ?? new Version(0, 0, 0, 0);
 
-    [GeneratedRegex(@"\d+\.\d+(?:\.\d+){0,2}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\d+\.\d+(?:\.\d+){0,2}(?:[-_](?:dev|alpha|beta|preview|rc|nightly|canary)\d*)?", RegexOptions.IgnoreCase)]
     private static partial Regex ExtractVersionRegex();
 
     /// <summary>
@@ -1071,7 +1071,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 // Replace folder name with the new version name when required
                                 if (Version.TryParse(newVersionStr, out var newVersion) && !currentVersion.Equals(newVersion))
                                 {
-                                    var newDirectoryName = SanitizeFileNameWithVersion(di.Name, newVersionStr);
+                                    var newDirectoryName = SanitizeDirectoryNameWithVersion(di.Name, newVersionStr);
                                     if (di.Name != newDirectoryName)
                                     {
                                         var parent = di.Parent;
@@ -1252,7 +1252,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 // Replace folder name with the new version name when required
                                 if (Version.TryParse(newVersionStr, out var newVersion) && !currentVersion.Equals(newVersion))
                                 {
-                                    var newDirectoryName = SanitizeFileNameWithVersion(di.Name, newVersionStr);
+                                    var newDirectoryName = SanitizeDirectoryNameWithVersion(di.Name, newVersionStr);
                                     if (di.Name != newDirectoryName)
                                     {
                                         var parent = di.Parent;
@@ -1399,9 +1399,10 @@ public partial class UpdatumManager : INotifyPropertyChanged
                     // By defaults uses same filename as currently downloaded
                     var targetFileName = fileNameNoExt;
 
-                    if (!string.IsNullOrWhiteSpace(currentExecutablePath)) // Infer from previous filename and use it instead
+                    if (!string.IsNullOrWhiteSpace(currentExecutablePath)) // Infer from executing filename and use it instead
                     {
-                        targetFileName = SanitizeFileNameWithVersion(Path.GetFileNameWithoutExtension(currentExecutablePath), newVersionStr);
+                        var currentExecutableFileName = Path.GetFileName(currentExecutablePath);
+                        targetFileName = Path.GetFileNameWithoutExtension(SanitizeFileNameWithVersion(currentExecutableFileName, newVersionStr));
                     }
                     else if (!string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)) // Manual filename
                     {
@@ -1549,36 +1550,52 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
     #region Static Methods
     /// <summary>
-    /// Sanitizes a file name with the new version name if it uses one and remove the hash if present.
+    /// Sanitizes a directory name with the new version name if it uses one and remove the hash if present.
     /// </summary>
-    /// <param name="filename">The filename or directory to sanitize.</param>
-    /// <param name="newVersion">The new version to replace in filename if it uses a version in it.</param>
-    public static string SanitizeFileNameWithVersion(string filename, string newVersion)
+    /// <param name="directory">The directory to sanitize.</param>
+    /// <param name="newVersion">The new version to replace in directory if it uses a version in it.</param>
+    /// <returns>The sanitized directory name, without full path</returns>
+    public static string SanitizeDirectoryNameWithVersion(string directory, string newVersion)
     {
-        var fileNameNoExt = Path.GetFileNameWithoutExtension(filename);
-        var fileExtension = Path.GetExtension(filename);
+        var fileName = Path.GetFileName(directory);
 
-        var index = fileNameNoExt.LastIndexOf('_', 1);
-        if (index >= 0)
-        {
-            // Check if the filename has a hash at the end and strip it
-            var hash = fileNameNoExt[index..];
-            if (hash.Length >= 32) fileNameNoExt = fileNameNoExt[..index];
-        }
-
-        // Check and replace if the filename has a version in name
-        fileNameNoExt = ExtractVersionRegex().Replace(fileNameNoExt, newVersion);
-        return $"{fileNameNoExt}{fileExtension}";
+        // Check and replace if the filePath has a version in name
+        return ExtractVersionRegex().Replace(fileName, newVersion);
     }
 
     /// <summary>
     /// Sanitizes a file name with the new version name if it uses one and remove the hash if present.
     /// </summary>
-    /// <param name="filename">The filename or directory to sanitize.</param>
-    /// <param name="newVersion">The new version to replace in filename if it uses a version in it.</param>
-    public static string SanitizeFileNameWithVersion(string filename, Version newVersion)
+    /// <param name="filePath">The filePath to sanitize.</param>
+    /// <param name="newVersion">The new version to replace in filePath if it uses a version in it.</param>
+    /// <returns>The sanitized file name, without full path</returns>
+    public static string SanitizeFileNameWithVersion(string filePath, string newVersion)
     {
-        return SanitizeFileNameWithVersion(filename, newVersion.ToString());
+        var filePathSpan = filePath.AsSpan();
+        var fileNameNoExt = Path.GetFileNameWithoutExtension(filePathSpan);
+        var fileExtension = Path.GetExtension(filePathSpan);
+
+        // Check if the filePath has a hash at the end and strip it
+        // - AppImages renames with hash when integrated
+        var index = fileNameNoExt.LastIndexOf('_');
+        if (index > 0 && fileNameNoExt.Length - index >= 32)
+        {
+            fileNameNoExt = fileNameNoExt[..index];
+        }
+
+        var fileName = SanitizeDirectoryNameWithVersion(fileNameNoExt.ToString(), newVersion);
+        return $"{fileName}{fileExtension}";
+    }
+
+    /// <summary>
+    /// Sanitizes a file name with the new version name if it uses one and remove the hash if present.
+    /// </summary>
+    /// <param name="filePath">The filePath to sanitize.</param>
+    /// <param name="newVersion">The new version to replace in filePath if it uses a version in it.</param>
+    /// <returns>The sanitized file name, without full path</returns>
+    public static string SanitizeFileNameWithVersion(string filePath, Version newVersion)
+    {
+        return SanitizeFileNameWithVersion(filePath, newVersion.ToString());
     }
     #endregion
 

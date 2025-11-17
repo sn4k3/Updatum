@@ -1,9 +1,12 @@
+# v1.2.0 (16/11/2025)
+- Add NET 10 support
+
 # v1.1.6 (28/07/2025)
 - Improves the regex for extracting the version from file name to support more complex version formats, such as `1.2.3-alpha5`, `1.2.3-beta`, supported terms: dev|alpha|beta|preview|rc|nightly|canary
 - Fixes the rename of single file executable and directories when containing the version in the name, it was keeping the last version digit appended to the new version
 
 # v1.1.5 (19/07/2025)
-- Improves the `InstallUpdate` for windows installers, by generating and run a upgrade batch script, which in the end calls the installer with the provided arguments (same as before), but also provides more validation checks, better process termination, custom script injection and cleanup
+- Improves the `InstallUpdate` for windows installers, by generating and run a upgrade batch script, which in the end calls the installer with the provided arguments (same as before), but also provides more validation checks, better process termination, custom script injection and clean up
 - Improve the documentation for the `InstallUpdateCompleted` event
 - Fixes the `InstallUpdateCompleted` event being triggered after executing the installer on Windows, when it should trigger before executing the installer
 - Fixes the auto upgrade bat script for windows which had a leftover `pause` in the end of the script, which was causing the script to wait for user input before closing and then leaving the process open

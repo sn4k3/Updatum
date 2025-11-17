@@ -533,7 +533,9 @@ public partial class UpdatumManager : INotifyPropertyChanged
     /// Checks for updates in the repository.
     /// </summary>
     /// <returns><c>True</c> if update found relative to given <see cref="CurrentVersion"/>, otherwise <c>false</c>.</returns>
-    /// <exception cref="ApiException"/>
+    /// <exception cref="Octokit.ApiException"/>
+    /// <exception cref="System.Net.Http.HttpRequestException">No such host is known. (api.github.com:443)</exception>
+    /// <exception cref="System.Net.Sockets.SocketException">No such host is known.</exception>
     public async Task<bool> CheckForUpdatesAsync()
     {
         if (IsBusy) return false;

@@ -1413,7 +1413,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
                     var targetFilePath = Path.Combine(targetDirectoryPath, $"{targetFileName}{fileExtension}");
 
-                    File.Move(downloadedAsset.FilePath, targetFilePath, true);
+                    File.Move(filePath, targetFilePath, true);
 
                     if (currentExecutablePath != targetFilePath
                         && !string.IsNullOrWhiteSpace(currentExecutablePath)

@@ -1,3 +1,6 @@
+# v1.2.1 (28/11/2025)
+- Fixes the auto upgrade for single file executables contained on the zip files, which was replacing the program with the downloaded zip file instead of the extracted executable
+
 # v1.2.0 (16/11/2025)
 - Add NET 10 support
 

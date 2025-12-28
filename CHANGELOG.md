@@ -1,3 +1,16 @@
+# v1.3.0 (28/12/2025)
+- Add `GetApplicationInfoString` and `GetApplicationInfoDict` methods to `EntryApplication`
+- Add `ProcessId` property to `EntryApplication`
+- Add disposal pattern to `UpdatumManager` to properly dispose the internal timer
+- Add `CheckForUpdatesAsync(Version)` overload to check for updates against a specific version
+- Add `ConfigureAwait(false)` to all awaited calls
+- Improvements and rewrites on upgrade script (#6)
+- Improvements on better detection of .exe installer types on Windows to avoid false positives as single app file executables (#6)
+- Changed `EntryApplication` to lazy cache all valeus instead of querying every time
+- Fix the windows batch script when attempt to move directory (fail) because of space in argument `/ Y`
+- Fix macOS `EntryApplication.MacOSAppBundlePath` due inverted if condition
+- Fix the `EntryApplication.LaunchNewInstance` method for macOS, which was failing to launch in case of a App Bundle
+
 # v1.2.1 (28/11/2025)
 - Fixes the auto upgrade for single file executables contained on the zip files, which was replacing the program with the downloaded zip file instead of the extracted executable
 

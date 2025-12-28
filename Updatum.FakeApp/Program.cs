@@ -7,25 +7,28 @@ namespace Updatum.FakeApp;
 
 internal class Program
 {
+    private const string RepositoryOwner = "sn4k3";
+    private const string RepositoryName = "UVtools";
+
     // https://github.com/sn4k3/UVtools/releases
-    internal static readonly UpdatumManager AppUpdater = new("sn4k3", "UVtools")
+    internal static readonly UpdatumManager AppUpdater = new(RepositoryOwner, RepositoryName)
     {
         // Regex filter to get the correct asset from running system
         // Defaults would work here too: EntryApplication.GenericRuntimeIdentifier
-        AssetRegexPattern = $"^UVtools_{EntryApplication.GenericRuntimeIdentifier}_v",
+        AssetRegexPattern = $"^{RepositoryName}_{EntryApplication.GenericRuntimeIdentifier}_v",
         // Displays a basic user interface for MSI package
         // This will show the installer UI installing without any interaction
         InstallUpdateWindowsInstallerArguments = "/qb",
         // Fallback name if unable to determine the executable name from the entry application
         // This is safe to omit, but as we are using a fake app, we need to set it
-        InstallUpdateSingleFileExecutableName = "UVtools",
+        InstallUpdateSingleFileExecutableName = RepositoryName,
         InstallUpdateCodesignMacOSApp = true,
     };
 
     private static async Task Main()
     {
-        Debug.WriteLine(EntryApplication.ToString());
-        Console.WriteLine(EntryApplication.ToString());
+        Debug.WriteLine(EntryApplication.ApplicationInfo);
+        Console.WriteLine(EntryApplication.ApplicationInfo);
 
         AppUpdater.PropertyChanged += AppUpdaterOnPropertyChanged;
         Console.WriteLine($"Checking for updates for {AppUpdater.Owner}/{AppUpdater.Repository}");
@@ -39,8 +42,21 @@ internal class Program
 
             if (!updateFound) return;
 
-            var release = AppUpdater.LatestRelease!;
-            var asset = AppUpdater.GetCompatibleReleaseAsset(release)!;
+            var release = AppUpdater.LatestRelease;
+
+            if (release is null)
+            {
+                Console.WriteLine("No release found!");
+                return;
+            }
+
+            var asset = AppUpdater.GetCompatibleReleaseAsset(release);
+
+            if (asset is null)
+            {
+                Console.WriteLine("No compatible asset found for this system.");
+                return;
+            }
 
             Console.WriteLine();
             Console.WriteLine("Changelog:");
@@ -62,10 +78,10 @@ internal class Program
             }
 
             Console.WriteLine($"Downloading {asset.Name}...");
-            var download = await AppUpdater.DownloadUpdateAsync();
+            var download = await AppUpdater.DownloadUpdateAsync(release);
             if (download is null)
             {
-                Console.WriteLine($"Download failed");
+                Console.WriteLine("Download failed");
                 return;
             }
 

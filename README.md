@@ -16,20 +16,40 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
 - **⚙️ Flexible Integration:** Easily embed into your WPF, WinForms, or console applications.
 - **🔍 Update Checker:** Manually and/or automatically checks GitHub for the latest release version.
 - **📦 Asset Management:** Automatically fetches the latest release assets based on your platform and architecture.
-- **📄 Changelog Support:** Retrive release(s) notes directly from GitHub Releases.
+- **📄 Changelog Support:** Retrieve release notes directly from GitHub Releases.
 - **⬇️ Download with Progress Tracking:** Download and track progress handler.
 - **🔄 Auto-Upgrade Support:** Automatically upgrades your application to a new release.
 - **📦 No External Dependencies:** Minimal overhead and no need for complex update infrastructure.
 
+## Installation
+
+## NuGet:
+
+```
+PM> Install-Package Updatum
+```
+
+## .NET CLI:
+
+```
+dotnet add package Updatum
+```
+
+## Package reference directly to your `.csproj` file:
+
+```xml
+<PackageReference Include="Updatum" Version="*" />
+```
+
 ## Requirements
 
 1. Publish your application to GitHub Releases.
-1. Name your assets acordingly the platform and architecture:
+2. Name your assets accordingly for the platform and architecture:
    - Windows: `MyApp_win-x64_v1.0.0.exe`, `MyApp_win-x64_v1.0.0.msi`, `MyApp_win-x64_v1.0.0.zip`
    - Linux: `MyApp_linux-x64_v1.0.0.AppImage`, `MyApp_linux-x64_v1.0.0.zip`
    - MacOS x64: `MyApp_osx-arm64_v1.0.0.zip`
    - [Example for assets](https://github.com/sn4k3/UVtools/releases/latest)
-   - **NOTE:** The asset fetching can be configurable
+   - **NOTE:** The asset fetching is configurable via regex patterns.
 
 ## Auto updater strategy
 
@@ -45,17 +65,17 @@ If automatic, Updatum will:
 ### Compatibility
 
 - Portable applications (zip)
-- Dotnet single-files publishes
+- .NET single-file publishes
 - Windows Installer (exe and msi)
 - Linux [AppImage](https://appimage.org/)
-- macOS app bunble
+- macOS app bundle
 
 ## Example
 
-Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a example of how to use Updatum.
+Check the [Updatum.FakeApp](https://github.com/sn4k3/Updatum/blob/main/Updatum.FakeApp/Program.cs) project for a complete example.
 
 <details>
-<summary>Console output:</summary>
+<summary>Console output example</summary>
 
 
 ```
@@ -377,3 +397,17 @@ AppUpdater.AutoUpdateCheckTimer.Interval = TimeSpan.FromHours(1).TotalMillisecon
 AppUpdater.AutoUpdateCheckTimer.Start();
 ```
 </details>
+
+<details>
+<summary>How to force trigger an update</summary>
+
+### Force trigger an update
+
+You can force trigger an update check and event with by passing a specific version to compare with the latest release.  
+The easiest way is to pass a empty version `0.0.0.0` to always trigger the update found event.
+
+```csharp
+var updateFound = await AppUpdater.CheckForUpdatesAsync(new Version());
+```
+</details>
+

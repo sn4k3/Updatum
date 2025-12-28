@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -6,15 +7,15 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Timers;
-using System.Net.Http.Headers;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Timers;
 using Octokit;
 using Updatum.Extensions;
 
@@ -23,7 +24,7 @@ namespace Updatum;
 /// <summary>
 /// Represents the Updatum class.
 /// </summary>
-public partial class UpdatumManager : INotifyPropertyChanged
+public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
 {
     #region Events
     /// <summary>
@@ -96,9 +97,9 @@ public partial class UpdatumManager : INotifyPropertyChanged
     private const string LinuxFlatpakFileExtension = ".flatpak";
 
     /// <summary>
-    /// Default file extension for windows installers.
+    /// Default file extension for Windows installers.
     /// </summary>
-    private static string[] WindowsInstallerFileExtensions => [".msi", ".exe"];
+    private static readonly string[] WindowsInstallerFileExtensions = [".msi", ".exe"];
 
     #endregion
 
@@ -140,6 +141,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
     #endregion
 
     #region Members
+    private bool _disposed;
     private System.Timers.Timer? _autoUpdateCheckTimer;
     private bool _fetchOnlyLatestRelease;
     private DateTime _lastCheckDateTime = DateTime.MinValue;
@@ -289,8 +291,10 @@ public partial class UpdatumManager : INotifyPropertyChanged
         get => _assetRegexPattern;
         set
         {
-            if(!RaiseAndSetIfChanged(ref _assetRegexPattern, value)) return;
-            AssetRegex = string.IsNullOrWhiteSpace(value) ? null : new Regex(_assetRegexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            if (!RaiseAndSetIfChanged(ref _assetRegexPattern, value)) return;
+            AssetRegex = string.IsNullOrWhiteSpace(value)
+                ? null
+                : new Regex(value, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         }
     }
 
@@ -532,11 +536,12 @@ public partial class UpdatumManager : INotifyPropertyChanged
     /// <summary>
     /// Checks for updates in the repository.
     /// </summary>
-    /// <returns><c>True</c> if update found relative to given <see cref="CurrentVersion"/>, otherwise <c>false</c>.</returns>
+    /// <returns><c>True</c> if update found relative to given <paramref name="baseVersion"/>, otherwise <c>false</c>.</returns>
+    /// <remarks>Can be used to force trigger an update by pass an initial version.</remarks>
     /// <exception cref="Octokit.ApiException"/>
     /// <exception cref="System.Net.Http.HttpRequestException">No such host is known. (api.github.com:443)</exception>
     /// <exception cref="System.Net.Sockets.SocketException">No such host is known.</exception>
-    public async Task<bool> CheckForUpdatesAsync()
+    public async Task<bool> CheckForUpdatesAsync(Version baseVersion)
     {
         if (IsBusy) return false;
         State = UpdatumState.CheckingForUpdate;
@@ -554,15 +559,15 @@ public partial class UpdatumManager : INotifyPropertyChanged
         {
             if (FetchOnlyLatestRelease)
             {
-                var release = await GithubClient.Repository.Release.GetLatest(Owner, Repository);
+                var release = await GithubClient.Repository.Release.GetLatest(Owner, Repository).ConfigureAwait(false);
                 Releases = [release];
             }
             else
             {
-                Releases = await GithubClient.Repository.Release.GetAll(Owner, Repository, GitHubApiOptions);
+                Releases = await GithubClient.Repository.Release.GetAll(Owner, Repository, GitHubApiOptions).ConfigureAwait(false);
             }
 
-            var releasesAheadList = new List<Release>();
+            var releasesAheadList = new List<Release>(Releases.Count);
 
             foreach (var release in Releases)
             {
@@ -575,7 +580,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                 var tagVersion = release.GetTagVersion();
 
                 if (tagVersion is null) continue;
-                if (tagVersion.CompareTo(CurrentVersion) <= 0)
+                if (tagVersion.CompareTo(baseVersion) <= 0)
                     break; // If the release version is less than or equal to the current version, break it.
                 if (GetCompatibleReleaseAsset(release) is null) continue; // Skip releases without matching assets
 
@@ -598,6 +603,18 @@ public partial class UpdatumManager : INotifyPropertyChanged
         }
 
         return IsUpdateAvailable;
+    }
+
+    /// <summary>
+    /// Checks for updates in the repository.
+    /// </summary>
+    /// <returns><c>True</c> if update found relative to given <see cref="CurrentVersion"/>, otherwise <c>false</c>.</returns>
+    /// <exception cref="Octokit.ApiException"/>
+    /// <exception cref="System.Net.Http.HttpRequestException">No such host is known. (api.github.com:443)</exception>
+    /// <exception cref="System.Net.Sockets.SocketException">No such host is known.</exception>
+    public Task<bool> CheckForUpdatesAsync()
+    {
+        return CheckForUpdatesAsync(CurrentVersion);
     }
 
     /// <summary>
@@ -662,7 +679,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
     ///     - <c>AppImage</c> if running under AppImage<br/>
     ///     - <c>Flatpak</c> if running under Flatpak<br/>
     ///     - Otherwise, defaults to <c>.zip</c><br/>
-    ///   - If none of the above matches, it will fallback to the first matching asset
+    ///   - If none of the above matches, it will fall back to the first matching asset
     /// </remarks>
     /// <returns>The <see cref="ReleaseAsset"/> for the current system and app type, if not found, return <c>null</c>.</returns>
     public ReleaseAsset? GetCompatibleReleaseAsset(Release release)
@@ -689,14 +706,9 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
             if (OperatingSystem.IsWindows())
             {
-                if (EntryApplication.IsDotNetSingleFileApp)
-                {
-                    extension = ".exe";
-                }
-                else
-                {
-                    extension = ".msi"; // Default to MSI installer
-                }
+                extension = EntryApplication.IsDotNetSingleFileApp
+                    ? ".exe"
+                    : ".msi"; // Default to MSI installer
             }
             else if (OperatingSystem.IsLinux())
             {
@@ -742,9 +754,10 @@ public partial class UpdatumManager : INotifyPropertyChanged
     /// <param name="release">The release to download.</param>
     /// <param name="cancellationToken"></param>
     /// <returns>A <see cref="UpdatumDownloadedAsset"/> object, otherwise returns null if failed.</returns>
-    /// <exception cref="ArgumentNullException"/>
-    /// <exception cref="OperationCanceledException"/>
-    /// <exception cref="HttpRequestException"/>
+    /// <exception cref="ArgumentNullException">Thrown when release is null after resolution.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the operation is cancelled.</exception>
+    /// <exception cref="HttpRequestException">Thrown when the HTTP request fails.</exception>
+    /// <exception cref="IOException">Thrown when file operations fail.</exception>
     public async Task<UpdatumDownloadedAsset?> DownloadUpdateAsync(Release? release = null, CancellationToken cancellationToken = default)
     {
         if (IsBusy) return null;
@@ -760,7 +773,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
         try
         {
-            using var response = await HttpClient.GetAsync(asset.BrowserDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await HttpClient.GetAsync(asset.BrowserDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var totalBytes = response.Content.Headers.ContentLength ?? asset.Size;
@@ -768,25 +781,32 @@ public partial class UpdatumManager : INotifyPropertyChanged
             DownloadSizeBytes = totalBytes > 0 ? totalBytes : -1;
 
             await using (var fileStream = new FileStream(targetPath, System.IO.FileMode.Create, FileAccess.Write, FileShare.None, DefaultBufferSize, true))
-            await using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
             {
-                var buffer = new byte[DefaultBufferSize];
                 long totalRead = 0;
-                int bytesRead;
                 var lastReportTime = Stopwatch.GetTimestamp();
-                while ((bytesRead = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+                var buffer = ArrayPool<byte>.Shared.Rent(DefaultBufferSize);
+                try
                 {
-                    await fileStream.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, bytesRead), cancellationToken);
-                    totalRead += bytesRead;
-
-                    // Display progress every x seconds or on final chunk
-                    var currentTimestamp = Stopwatch.GetTimestamp();
-                    var elapsedTimeSpan = Stopwatch.GetElapsedTime(lastReportTime, currentTimestamp);
-                    if (elapsedTimeSpan.TotalSeconds >= DownloadProgressUpdateFrequencySeconds || totalRead == totalBytes)
+                    int bytesRead;
+                    while ((bytesRead = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
                     {
-                        DownloadedBytes = totalRead;
-                        lastReportTime = currentTimestamp;
+                        await fileStream.WriteAsync(new ReadOnlyMemory<byte>(buffer, 0, bytesRead), cancellationToken).ConfigureAwait(false);
+                        totalRead += bytesRead;
+
+                        // Display progress every x seconds or on final chunk
+                        var currentTimestamp = Stopwatch.GetTimestamp();
+                        var elapsedTimeSpan = Stopwatch.GetElapsedTime(lastReportTime, currentTimestamp);
+                        if (elapsedTimeSpan.TotalSeconds >= DownloadProgressUpdateFrequencySeconds || totalRead == totalBytes)
+                        {
+                            DownloadedBytes = totalRead;
+                            lastReportTime = currentTimestamp;
+                        }
                     }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
                 }
             }
 
@@ -842,23 +862,35 @@ public partial class UpdatumManager : INotifyPropertyChanged
     /// <remarks>Note this function will never return True as program is terminated to upgrade.</remarks>
     public async Task<bool> DownloadAndInstallUpdateAsync(Release? release = null, CancellationToken cancellationToken = default)
     {
-        var download = await DownloadUpdateAsync(release, cancellationToken);
+        var download = await DownloadUpdateAsync(release, cancellationToken).ConfigureAwait(false);
         if (download is null) return false;
         cancellationToken.ThrowIfCancellationRequested();
-        return await InstallUpdateAsync(download);
+        return await InstallUpdateAsync(download).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Tries to auto installs the update.
+    /// Installs the specified downloaded update asset asynchronously, replacing the current application or its components
+    /// as needed.
     /// </summary>
-    /// <param name="downloadedAsset">The downloaded asset to upgrade from.</param>
-    /// <param name="runArguments"><p>Arguments to pass when run the upgraded application.</p>
-    /// <p>Use the token: <see cref="NoRunAfterUpgradeToken"/> to prevent app from rerun after upgrade.</p></param>
-    /// <exception cref="FileNotFoundException"/>
-    /// <exception cref="NotSupportedException"/>
-    /// <exception cref="IOException"/>
-    /// <exception cref="UnauthorizedAccessException"/>
-    public Task<bool> InstallUpdateAsync(UpdatumDownloadedAsset downloadedAsset, string? runArguments = null)
+    /// <remarks>This method supports a variety of update asset types, including portable executables, archives,
+    /// Windows installers, and Linux Flatpak or AppImage files. The installation process may involve extracting files,
+    /// running platform-specific scripts, or invoking system installers. On successful installation, the current
+    /// application may be terminated and the updated version launched, depending on the parameters provided. The method is
+    /// cross-platform and handles platform-specific behaviors internally. If the update cannot be installed due to an
+    /// unrecognized file type, the method returns false without throwing an exception.</remarks>
+    /// <param name="downloadedAsset">The downloaded update asset to install. Must reference a valid, existing file containing the update package or
+    /// installer.</param>
+    /// <param name="forceTerminate">true to forcefully terminate the current application after starting the update installation; otherwise, false. If
+    /// set to true, the process will exit to allow the update to complete safely.</param>
+    /// <param name="runArguments">Optional command-line arguments to pass when launching the updated application after installation. If null or
+    /// omitted, the default launch behavior is used. If a special token is provided to suppress relaunch, the application
+    /// will not be started after the update.</param>
+    /// <returns>A task that represents the asynchronous installation operation. The task result is true if the update was
+    /// successfully initiated; otherwise, false if the file type was not recognized or installation could not proceed.</returns>
+    /// <exception cref="FileNotFoundException">Thrown if the file specified by downloadedAsset does not exist.</exception>
+    /// <exception cref="NotSupportedException">Thrown if the update file type is not supported on the current operating system.</exception>
+    /// <exception cref="IOException">Thrown if an error occurs during installation, such as a failure to install a Flatpak package.</exception>
+    public Task<bool> InstallUpdateAsync(UpdatumDownloadedAsset downloadedAsset, bool forceTerminate = true, string? runArguments = null)
     {
         if (!downloadedAsset.FileExists) throw new FileNotFoundException("File not found", downloadedAsset.FilePath);
 
@@ -873,6 +905,25 @@ public partial class UpdatumManager : INotifyPropertyChanged
         var currentVersion = EntryApplication.AssemblyVersion ?? CurrentVersion;
         var newVersionStr = downloadedAsset.TagVersionStr;
 
+        var scriptFileName = $"{fileNameNoExt}-UpdatumAutoUpgrade";
+
+        StreamWriter CreateScriptFile(out string scriptFilePath)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                scriptFilePath = Path.Combine(tmpPath, $"{scriptFileName}.bat");
+                return File.CreateText(scriptFilePath);
+            }
+
+            scriptFilePath = Path.Combine(tmpPath, $"{scriptFileName}.sh");
+            var stream = File.CreateText(scriptFilePath);
+            stream.NewLine = "\n"; // Use Unix line endings
+            return stream;
+        }
+
+        // *************
+        // ** Windows **
+        // *************
         void WriteWindowsScriptHeader(StreamWriter stream)
         {
             stream.WriteLine("@echo off");
@@ -880,21 +931,41 @@ public partial class UpdatumManager : INotifyPropertyChanged
             stream.WriteLine();
             stream.WriteLine($"REM Autogenerated by {nameof(UpdatumManager)} v{LibraryVersion.ToString(3)} [{DateTime.Now}]");
             stream.WriteLine($"REM {EntryApplication.AssemblyName} upgrade script");
-            stream.WriteLine($"echo {EntryApplication.AssemblyName} v{currentVersion} -> {newVersionStr} updater script");
+            stream.WriteLine($"echo \"{EntryApplication.AssemblyName} v{EntryApplication.AssemblyVersionString} -> {newVersionStr} updater script\"");
+            stream.WriteLine("set \"DIR=%~dp0\"");
+            stream.WriteLine("cd /d \"%DIR%\"");
             stream.WriteLine();
-            stream.WriteLine("set DIR=%~dp0%");
-            stream.WriteLine($"set \"oldVersion={currentVersion}\"");
-            stream.WriteLine($"set \"newVersion={newVersionStr}\"");
-            stream.WriteLine($"set \"DOWNLOAD_FILEPATH={downloadedAsset.FilePath}\"");
+
+            // Set EntryApplication variables
+            stream.WriteLine($"REM {nameof(EntryApplication)} variables");
+            var info = EntryApplication.GetApplicationInfoDict();
+            foreach (var kp in info)
+            {
+                stream.WriteLine($"set \"{kp.Key}={Utilities.BatchSetValue(kp.Value)}\"");
+            }
+            stream.WriteLine();
+
+            // Set variables
+            stream.WriteLine("REM Variables");
+            stream.WriteLine($"set \"oldVersion={Utilities.BatchSetValue(EntryApplication.AssemblyVersionString)}\"");
+            stream.WriteLine($"set \"newVersion={Utilities.BatchSetValue(newVersionStr)}\"");
+            stream.WriteLine($"set \"DOWNLOAD_FILEPATH={Utilities.BatchSetValue(downloadedAsset.FilePath)}\"");
+            stream.WriteLine($"set \"FILEPATH={Utilities.BatchSetValue(filePath)}\"");
+            stream.WriteLine($"set \"RUN_AFTER_UPGRADE={runArguments != NoRunAfterUpgradeToken}\"");
+            stream.WriteLine($"set \"RUN_ARGUMENTS={Utilities.BatchSetValue(runArguments)}\"");
             stream.WriteLine();
         }
 
-        void WriteWindowsScriptDownloadedFileValidation(StreamWriter stream)
+        void WriteWindowsScriptFileValidation(StreamWriter stream)
         {
             // Downloaded file path verification
             stream.WriteLine("if not exist \"%DOWNLOAD_FILEPATH%\" (");
             stream.WriteLine("  echo - Error: The expected downloaded file does not exist");
-            stream.WriteLine("  exit /b -1");
+            stream.WriteLine("  exit /b 1");
+            stream.WriteLine(')');
+            stream.WriteLine("if not exist \"%FILEPATH%\" (");
+            stream.WriteLine("  echo - Error: The expected filepath does not exist");
+            stream.WriteLine("  exit /b 1");
             stream.WriteLine(')');
             stream.WriteLine();
         }
@@ -906,11 +977,11 @@ public partial class UpdatumManager : INotifyPropertyChanged
             if (EntryApplication.IsRunningFromDotNetProcess)
             {
                 // Dangerous if script run again latter.
-                //stream.WriteLine($"taskkill /pid {Environment.ProcessId} /f /t");
+                //stream.WriteLine($"taskkill /pid {Environment.ProcessId} /f /t >nul 2>&1");
             }
             else if (!string.IsNullOrWhiteSpace(EntryApplication.ProcessName))
             {
-                killCommands.Add($"taskkill /IM \"{EntryApplication.ProcessName}\" /T");
+                killCommands.Add($"taskkill /IM \"%{nameof(EntryApplication.ProcessName)}%\" /T >nul 2>&1");
             }
 
             if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyName))
@@ -918,7 +989,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                 var name = $"{EntryApplication.AssemblyName}.exe";
                 if (killCommands.Count == 0 || EntryApplication.ProcessName != name)
                 {
-                    killCommands.Add($"taskkill /IM \"{name}\" /T");
+                    killCommands.Add($"taskkill /IM \"{name}\" /T >nul 2>&1");
                 }
             }
 
@@ -963,20 +1034,129 @@ public partial class UpdatumManager : INotifyPropertyChanged
         void WriteWindowsScriptEnd(StreamWriter stream)
         {
             stream.WriteLine("echo - Removing temp source files");
-            stream.WriteLine("del /F /Q \"%DOWNLOAD_FILEPATH%\"");
+            stream.WriteLine("if not \"%DOWNLOAD_FILEPATH%\"==\"\" if /I not \"%DOWNLOAD_FILEPATH%\"==\"\\\" if exist \"%DOWNLOAD_FILEPATH%\" del /F /Q \"%DOWNLOAD_FILEPATH%\"");
+            stream.WriteLine("if not \"%FILEPATH%\"==\"\" if /I not \"%FILEPATH%\"==\"\\\" if exist \"%FILEPATH%\" del /F /Q \"%FILEPATH%\"");
             stream.WriteLine(" REM /F - Force deleting of read-only files.");
             stream.WriteLine(" REM /Q - Quiet mode, do not ask if ok to delete on global wildcard.");
             stream.WriteLine();
 
-#if !DEBUG
+#if RELEASE
             stream.WriteLine("echo - Removing self");
-            stream.WriteLine("del /F /Q \"%~f0\"");
+            stream.WriteLine("start \"\" /b cmd /c \"timeout /t 1 >nul & del /f /q \\\"%~f0\\\"\"");
             stream.WriteLine();
 #endif
 
             stream.WriteLine("endlocal");
-            stream.WriteLine("echo '- Completed'");
+            stream.WriteLine("echo - Completed");
             stream.WriteLine("REM End of script");
+        }
+
+        // ***********
+        // ** Linux **
+        // ***********
+        void WriteLinuxScriptHeader(StreamWriter stream)
+        {
+            // Shebang line
+            stream.WriteLine("#!/usr/bin/env bash");
+            stream.WriteLine($"# Autogenerated by {nameof(UpdatumManager)} v{LibraryVersion.ToString(3)} [{DateTime.Now}]");
+            stream.WriteLine($"# {EntryApplication.AssemblyName} upgrade script");
+            stream.WriteLine($"echo \"{EntryApplication.AssemblyName} v{currentVersion} -> {newVersionStr} updater script\"");
+            stream.WriteLine("cd \"$(dirname \"$0\")\"");
+            stream.WriteLine();
+
+            // Set EntryApplication variables
+            stream.WriteLine($"# {nameof(EntryApplication)} variables");
+            var info = EntryApplication.GetApplicationInfoDict();
+            foreach (var kp in info)
+            {
+                stream.WriteLine($"{kp.Key}={Utilities.BashAnsiCString(kp.Value)}");
+            }
+            stream.WriteLine();
+
+            // Set variables
+            stream.WriteLine("# Variables");
+            stream.WriteLine($"oldVersion={Utilities.BashAnsiCString(EntryApplication.AssemblyVersionString)}");
+            stream.WriteLine($"newVersion={Utilities.BashAnsiCString(newVersionStr)}");
+            stream.WriteLine($"DOWNLOAD_FILEPATH={Utilities.BashAnsiCString(downloadedAsset.FilePath)}");
+            stream.WriteLine($"FILEPATH={Utilities.BashAnsiCString(filePath)}");
+            stream.WriteLine($"RUN_AFTER_UPGRADE={Utilities.BashAnsiCString(runArguments != NoRunAfterUpgradeToken)}");
+            stream.WriteLine($"RUN_ARGUMENTS={Utilities.BashAnsiCString(runArguments)}");
+            stream.WriteLine();
+        }
+
+        void WriteLinuxScriptKillInstances(StreamWriter stream)
+        {
+            var killCommands = new List<string>(3);
+
+            if (EntryApplication.IsRunningFromDotNetProcess)
+            {
+                // Dangerous if script run again latter.
+                //stream.WriteLine($"kill -9 {Environment.ProcessId}");
+            }
+            else if (!string.IsNullOrWhiteSpace(EntryApplication.ProcessName))
+            {
+                killCommands.Add($"-f \"${nameof(EntryApplication.ProcessName)}\"");
+            }
+
+            if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyName))
+            {
+                if (killCommands.Count == 0 || EntryApplication.ProcessName != EntryApplication.AssemblyName)
+                {
+                    killCommands.Add($"-f \"${nameof(EntryApplication.AssemblyName)}\"");
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyLocation))
+            {
+                killCommands.Add($"-f \"dotnet.+{Path.GetFileName(Regex.Escape(EntryApplication.AssemblyLocation))}\"");
+            }
+
+            if (killCommands.Count > 0)
+            {
+                // Kill processes
+                stream.WriteLine("echo \"- Killing processes\"");
+                stream.WriteLine("sleep 0.5");
+                stream.WriteLine();
+
+                foreach (var killCommand in killCommands)
+                {
+                    stream.WriteLine($"pkill -TERM {killCommand} || true");
+                }
+                stream.WriteLine("sleep 2");
+                foreach (var killCommand in killCommands)
+                {
+                    stream.WriteLine($"pkill -KILL {killCommand} || true");
+                }
+                stream.WriteLine("sleep 0.5");
+                stream.WriteLine();
+            }
+        }
+
+        void WriteLinuxScriptInjectCustomScript(StreamWriter stream)
+        {
+            if (!string.IsNullOrWhiteSpace(InstallUpdateInjectCustomScript))
+            {
+                stream.WriteLine("# Custom script provided by the author.");
+                // Ensure only LF is used on Linux
+                stream.WriteLine(InstallUpdateInjectCustomScript.Replace("\r\n", "\n").Replace("\r", "\n"));
+                stream.WriteLine("# End of custom script provided by the author.");
+                stream.WriteLine();
+            }
+        }
+
+        void WriteLinuxScriptEnd(StreamWriter stream)
+        {
+            stream.WriteLine("echo \"- Removing temp source files\"");
+            stream.WriteLine("[[ -n \"$DOWNLOAD_FILEPATH\" && \"$DOWNLOAD_FILEPATH\" != \"/\" && \"$DOWNLOAD_FILEPATH\" != \"\\\" && -e \"$DOWNLOAD_FILEPATH\" ]] && rm -f -- \"$DOWNLOAD_FILEPATH\"");
+            stream.WriteLine("[[ -n \"$FILEPATH\" && \"$FILEPATH\" != \"/\" && \"$FILEPATH\" != \"\\\" && -e \"$FILEPATH\" ]] && rm -f -- \"$FILEPATH\"");
+            stream.WriteLine();
+
+#if RELEASE
+            stream.WriteLine("echo \"- Removing self\"");
+            stream.WriteLine("rm -f -- \"$0\"");
+#endif
+
+            stream.WriteLine("echo \"- Completed\"");
+            stream.WriteLine("# End of script");
         }
 
         try
@@ -1021,7 +1201,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 !string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)
                                     ? InstallUpdateSingleFileExecutableName
                                     : EntryApplication.AssemblyName
-                                      ?? Path.GetFileNameWithoutExtension(EntryApplication.ExecutableFileName)
+                                      ?? Path.GetFileNameWithoutExtension(EntryApplication.ExecutableName)
                                       ?? fileNameNoExt);
                         }
 
@@ -1029,27 +1209,27 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
                         if (OperatingSystem.IsWindows())
                         {
-                            var upgradeScriptFilePath = Path.Combine(tmpPath, $"{fileNameNoExt}-UpdatumAutoUpgrade.bat");
-
-                            using (var stream = File.CreateText(upgradeScriptFilePath))
+                            string upgradeScriptFilePath;
+                            using (var stream = CreateScriptFile(out upgradeScriptFilePath))
                             {
                                 WriteWindowsScriptHeader(stream);
 
-                                stream.WriteLine($"set \"SOURCE_PATH={extractDirectoryPath}\"");
-                                stream.WriteLine($"set \"DEST_PATH={targetDirectoryPath}\"");
+                                stream.WriteLine($"set \"SOURCE_PATH={Utilities.BatchSetValue(extractDirectoryPath)}\"");
+                                stream.WriteLine($"set \"DEST_PATH={Utilities.BatchSetValue(targetDirectoryPath)}\"");
                                 stream.WriteLine();
 
                                 // Source path verification
                                 stream.WriteLine("if not exist \"%SOURCE_PATH%\" (");
                                 stream.WriteLine("  echo - Error: Source path does not exist");
-                                stream.WriteLine("  exit /b -1");
+                                stream.WriteLine("  exit /b 1");
                                 stream.WriteLine(')');
                                 stream.WriteLine();
 
                                 WriteWindowsScriptKillInstances(stream);
 
                                 stream.WriteLine("echo - Sync/copying files over");
-                                stream.WriteLine("where robocopy >nul 2>&1 && (");
+                                stream.WriteLine("where robocopy >nul 2>&1");
+                                stream.WriteLine(" if %errorlevel%==0 (");
                                 stream.WriteLine("  echo copying using robocopy");
                                 stream.WriteLine("  robocopy \"%SOURCE_PATH%\" \"%DEST_PATH%\" /E /COPY:DAT /Z /R:3 /W:3 /MT:4");
                                 stream.WriteLine("   REM /E - Copies all subfolders, including empty ones.");
@@ -1061,8 +1241,9 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 stream.WriteLine("   REM /R:n - Retries on failed copies.");
                                 stream.WriteLine("   REM /W:n - Wait time between retries in seconds.");
                                 stream.WriteLine("   REM /MT:n - Multithreaded copies (faster).");
-                                stream.WriteLine(") || (");
-                                stream.WriteLine("  xcopy \"%SOURCE_PATH%\\*\" \"%DEST_PATH%\" /E /H /Y /C");
+                                stream.WriteLine(") else (");
+                                stream.WriteLine("  if not exist \"%DEST_PATH%\" mkdir \"%DEST_PATH%\"");
+                                stream.WriteLine("  xcopy \"%SOURCE_PATH%\\*\" \"%DEST_PATH%\\\" /E /H /Y /C");
                                 stream.WriteLine("   REM /E - Copies all subdirectories, including empty ones.");
                                 stream.WriteLine("   REM /H - Copies hidden and system files.");
                                 stream.WriteLine("   REM /Y - Suppresses prompting to overwrite files.");
@@ -1089,12 +1270,16 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                             else
                                             {
                                                 stream.WriteLine("echo - Attempt to rename directory");
-                                                stream.WriteLine($"move / Y \"%DEST_PATH%\" \"{newTargetDirectoryPath}\"");
-                                                stream.WriteLine($"SET \"%DEST_PATH%={newTargetDirectoryPath}\"");
+                                                stream.WriteLine($"set \"{nameof(EntryApplication.BaseDirectory)}={Utilities.BatchSetValue(newTargetDirectoryPath)}\"");
+                                                stream.WriteLine($"move /Y \"%DEST_PATH%\" \"%{nameof(EntryApplication.BaseDirectory)}%\"");
+                                                stream.WriteLine($"set \"DEST_PATH=%{nameof(EntryApplication.BaseDirectory)}%\"");
 
                                                 // Update executable path to the new directory
                                                 if (!string.IsNullOrWhiteSpace(newExecutingFilePath))
+                                                {
                                                     newExecutingFilePath = newExecutingFilePath.Replace(di.FullName, newTargetDirectoryPath);
+                                                    stream.WriteLine($"set \"{nameof(EntryApplication.ExecutablePath)}={Utilities.BatchSetValue(newExecutingFilePath)}\"");
+                                                }
 
                                                 targetDirectoryPath = newTargetDirectoryPath;
 
@@ -1106,24 +1291,24 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
                                 WriteWindowsScriptInjectCustomScript(stream);
 
-                                if (!string.IsNullOrWhiteSpace(newExecutingFilePath) && runArguments != NoRunAfterUpgradeToken)
-                                {
-                                    stream.WriteLine("echo - Execute the upgraded application");
-                                    stream.WriteLine($"if exist \"{newExecutingFilePath}\" (");
-                                    stream.WriteLine(EntryApplication.IsRunningFromDotNetProcess
-                                        ? $"  start \"\" \"{Environment.ProcessPath}\" \"{newExecutingFilePath}\" {runArguments}"
-                                        : $"  start \"\" \"{newExecutingFilePath}\" {runArguments}");
-                                    stream.WriteLine(") else (");
-                                    stream.WriteLine($"  echo File not found: {newExecutingFilePath}, not executing!");
-                                    stream.WriteLine(")");
-                                }
-                                else
-                                {
-                                    stream.WriteLine("echo - Skip execution of application, by the configuration or unable to locate the entry point.");
-                                }
+                                stream.WriteLine($"if not \"%{nameof(EntryApplication.ExecutablePath)}%\"==\"\" if /I \"%RUN_AFTER_UPGRADE%\"==\"True\" (");
+                                stream.WriteLine($"  echo - Execute the upgraded application");
+                                stream.WriteLine($"  if exist \"%{nameof(EntryApplication.ExecutablePath)}%\" (");
+                                stream.WriteLine(EntryApplication.IsRunningFromDotNetProcess
+                                               ? $"    start \"\" \"{Environment.ProcessPath}\" \"%{nameof(EntryApplication.ExecutablePath)}%\" %RUN_ARGUMENTS%"
+                                               : $"    start \"\" \"%{nameof(EntryApplication.ExecutablePath)}%\" %RUN_ARGUMENTS%");
+                                stream.WriteLine("  ) else (");
+                                stream.WriteLine($"    echo File not found: %{nameof(EntryApplication.ExecutablePath)}%, not executing!");
+                                stream.WriteLine("  )");
+                                stream.WriteLine(") else (");
+                                stream.WriteLine("  echo - Skip execution of application, by the configuration or unable to locate the entry point");
+                                stream.WriteLine(")");
 
                                 stream.WriteLine();
 
+                                stream.WriteLine("if \"%SOURCE_PATH%\"==\"\" exit /b 1");
+                                stream.WriteLine("if /I \"%SOURCE_PATH%\"==\"\\\" exit /b 1");
+                                stream.WriteLine("if /I \"%SOURCE_PATH%\"==\"C:\\\" exit /b 1");
                                 stream.WriteLine("rmdir /S /Q \"%SOURCE_PATH%\"");
                                 stream.WriteLine(" REM /S - Removes all directories and files in the specified directory in addition to the directory itself. Used to remove a directory tree.");
                                 stream.WriteLine(" REM /Q - Quiet mode, do not ask if ok to remove a directory tree with /S.");
@@ -1142,90 +1327,34 @@ public partial class UpdatumManager : INotifyPropertyChanged
                         }
                         else // Linux or macOS
                         {
-                            var upgradeScriptFilePath = Path.Combine(tmpPath, $"{fileNameNoExt}-UpdatumAutoUpgrade.sh");
-
-                            using (var stream = File.CreateText(upgradeScriptFilePath))
+                            string upgradeScriptFilePath;
+                            using (var stream = CreateScriptFile(out upgradeScriptFilePath))
                             {
-                                stream.NewLine = "\n";
-
-                                // Shebang line
-                                stream.WriteLine("#!/bin/bash");
-                                stream.WriteLine($"# Autogenerated by {nameof(UpdatumManager)} v{LibraryVersion.ToString(3)} [{DateTime.Now}]");
-                                stream.WriteLine($"# {EntryApplication.AssemblyName} upgrade script");
-                                stream.WriteLine($"echo \"{EntryApplication.AssemblyName} v{currentVersion} -> {newVersionStr} updater script\"");
-                                stream.WriteLine();
-
-                                // Set variables
-                                stream.WriteLine("cd \"$(dirname \"$0\")\"");
-                                stream.WriteLine($"oldVersion=\"{currentVersion}\"");
-                                stream.WriteLine($"newVersion=\"{newVersionStr}\"");
-                                stream.WriteLine($"DOWNLOAD_FILEPATH=\"{downloadedAsset.FilePath}\"");
-                                stream.WriteLine($"SOURCE_PATH=\"{extractDirectoryPath}\"");
-                                stream.WriteLine($"DEST_PATH=\"{targetDirectoryPath}\"");
+                                WriteLinuxScriptHeader(stream);
+                                stream.WriteLine($"SOURCE_PATH={Utilities.BashAnsiCString(extractDirectoryPath)}");
+                                stream.WriteLine($"DEST_PATH={Utilities.BashAnsiCString(targetDirectoryPath)}");
                                 stream.WriteLine();
 
                                 // Source path verification
                                 stream.WriteLine("if [ ! -d \"$SOURCE_PATH\" ]; then");
                                 stream.WriteLine("  echo \"- Error: Source path does not exist\"");
-                                stream.WriteLine("  exit -1");
+                                stream.WriteLine("  exit 1");
                                 stream.WriteLine("fi");
                                 stream.WriteLine();
 
-                                var killCommands = new List<string>(3);
-
-                                if (EntryApplication.IsRunningFromDotNetProcess)
-                                {
-                                    // Dangerous if script run again latter.
-                                    //stream.WriteLine($"kill -9 {Environment.ProcessId}");
-                                }
-                                else if (!string.IsNullOrWhiteSpace(EntryApplication.ProcessName))
-                                {
-                                    killCommands.Add($"-f \"{EntryApplication.ProcessName}\" || true");
-                                }
-
-                                if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyName))
-                                {
-                                    if (killCommands.Count == 0 || EntryApplication.ProcessName != EntryApplication.AssemblyName)
-                                    {
-                                        killCommands.Add($"-f \"{EntryApplication.AssemblyName}\" || true");
-                                    }
-                                }
-                                if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyLocation))
-                                {
-                                    killCommands.Add($"-f \"dotnet.+{Path.GetFileName(Regex.Escape(EntryApplication.AssemblyLocation))}\" || true");
-                                }
-
-                                if (killCommands.Count > 0)
-                                {
-                                    // Kill processes
-                                    stream.WriteLine("echo \"- Killing processes\"");
-                                    stream.WriteLine("sleep 0.5");
-                                    stream.WriteLine();
-
-                                    foreach (var killCommand in killCommands)
-                                    {
-                                        stream.WriteLine($"pkill -TERM {killCommand}");
-                                    }
-                                    stream.WriteLine("sleep 2");
-                                    foreach (var killCommand in killCommands)
-                                    {
-                                        stream.WriteLine($"pkill -KILL {killCommand}");
-                                    }
-                                    stream.WriteLine("sleep 0.5");
-                                    stream.WriteLine();
-                                }
+                                WriteLinuxScriptKillInstances(stream);
 
 
                                 if (OperatingSystem.IsMacOS())
                                 {
                                     stream.WriteLine("echo \"- Removing com.apple.quarantine flag\"");
-                                    stream.WriteLine("find \"$SOURCE_PATH\" -print0 | xargs -0 xattr -d com.apple.quarantine &> /dev/null");
+                                    stream.WriteLine("find \"$SOURCE_PATH\" -print0 | xargs -0 xattr -d com.apple.quarantine &> /dev/null || true");
                                     stream.WriteLine();
 
                                     if (InstallUpdateCodesignMacOSApp)
                                     {
                                         stream.WriteLine("echo \"- Force codesign to allow the app to run directly\"");
-                                        stream.WriteLine("find \"$SOURCE_PATH\" -maxdepth 1 -type d -name \"*.app\" -print0 | xargs -0 -I {} codesign --force --deep --sign - \"{}\"");
+                                        stream.WriteLine("find \"$SOURCE_PATH\" -maxdepth 1 -type d -name \"*.app\" -print0 | xargs -0 -I {} codesign --force --deep --sign - \"{}\" || true");
                                         stream.WriteLine();
                                     }
                                 }
@@ -1233,7 +1362,7 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 // Copy files
                                 stream.WriteLine("echo \"- Syncing/copying files over\"");
                                 stream.WriteLine("if command -v rsync >/dev/null 2>&1; then");
-                                stream.WriteLine("  rsync -arctxv --remove-source-files --stats \"$SOURCE_PATH/\" \"$DEST_PATH/\"");
+                                stream.WriteLine("  rsync -arctxv --remove-source-files --stats \"${SOURCE_PATH}/\" \"${DEST_PATH}/\"");
                                 stream.WriteLine("   # -a: Archive mode (recursive, preserve permissions, etc.)");
                                 stream.WriteLine("   # -r: Recurse into directories");
                                 stream.WriteLine("   # -c: Skip based on checksum, not mod-time & size");
@@ -1244,7 +1373,9 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 stream.WriteLine("   # --remove-source-files: Sender removes synchronized files (non-dir)");
                                 stream.WriteLine("   # --stats: Give some file transfer stats");
                                 stream.WriteLine("else");
-                                stream.WriteLine("  cp -fR \"$SOURCE_PATH/\"* \"$DEST_PATH/\"");
+                                stream.WriteLine("  cp -af \"${SOURCE_PATH}/.\" \"${DEST_PATH}/\"");
+                                stream.WriteLine("   # -a: same as -dR --preserve=all");
+                                stream.WriteLine("   # -d: same as --no-dereference --preserve=links");
                                 stream.WriteLine("   # -f: if an existing destination file cannot be opened, remove it and try again");
                                 stream.WriteLine("   # -R: recursive copy");
                                 stream.WriteLine("fi");
@@ -1270,12 +1401,16 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                             else
                                             {
                                                 stream.WriteLine("echo \"- Attempt to rename directory\"");
-                                                stream.WriteLine($"mv -f \"$DEST_PATH\" \"{newTargetDirectoryPath}\"");
-                                                stream.WriteLine($"DEST_PATH=\"{newTargetDirectoryPath}\"");
+                                                stream.WriteLine($"{nameof(EntryApplication.BaseDirectory)}={Utilities.BashAnsiCString(newTargetDirectoryPath)}");
+                                                stream.WriteLine($"mv -f \"$DEST_PATH\" \"${nameof(EntryApplication.BaseDirectory)}\"");
+                                                stream.WriteLine($"DEST_PATH=\"${nameof(EntryApplication.BaseDirectory)}\"");
 
                                                 // Update executable path to the new directory
                                                 if (!string.IsNullOrWhiteSpace(newExecutingFilePath))
+                                                {
                                                     newExecutingFilePath = newExecutingFilePath.Replace(di.FullName, newTargetDirectoryPath);
+                                                    stream.WriteLine($"{nameof(EntryApplication.ExecutablePath)}={Utilities.BashAnsiCString(newExecutingFilePath)}");
+                                                }
 
                                                 targetDirectoryPath = newTargetDirectoryPath;
                                             }
@@ -1285,62 +1420,51 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 }
 
                                 // Custom script injection
-                                if (!string.IsNullOrWhiteSpace(InstallUpdateInjectCustomScript))
-                                {
-                                    stream.WriteLine("# Custom script provided by the author.");
-                                    stream.WriteLine(InstallUpdateInjectCustomScript);
-                                    stream.WriteLine("# End of custom script provided by the author.");
-                                    stream.WriteLine();
-                                }
+                                WriteLinuxScriptInjectCustomScript(stream);
 
                                 // Execute the upgraded application
-                                if (!string.IsNullOrWhiteSpace(newExecutingFilePath) && runArguments != NoRunAfterUpgradeToken)
+                                stream.WriteLine($"if [ -n \"${nameof(EntryApplication.ExecutablePath)}\" ] && [ \"${{RUN_AFTER_UPGRADE:-False}}\" = \"True\" ]; then");
+                                stream.WriteLine("  echo \"- Execute the upgraded application\"");
+                                stream.WriteLine($"  if [ -f \"${nameof(EntryApplication.ExecutablePath)}\" ]; then");
+                                if (EntryApplication.IsRunningFromDotNetProcess)
                                 {
-                                    stream.WriteLine("echo \"- Execute the upgraded application\"");
-                                    stream.WriteLine($"if [ -f \"{newExecutingFilePath}\" ]; then");
-                                    if (EntryApplication.IsRunningFromDotNetProcess)
-                                    {
-                                        //stream.WriteLine($"  \"{EntryApplication.ExecutablePath}\" \"{newExecutingFilePath}\" {runArguments} & disown -h $!");
-                                        stream.WriteLine($"  nohup \"{Environment.ProcessPath}\" \"{newExecutingFilePath}\" {runArguments} >/dev/null 2>&1 &");
-                                    }
-                                    else
-                                    {
-                                        // Make executable if it's not
-                                        stream.WriteLine($"  chmod +x \"{newExecutingFilePath}\"");
-                                        //stream.WriteLine($"  \"{newExecutingFilePath}\" {runArguments} & disown -h $!");
-                                        stream.WriteLine($"  nohup \"{newExecutingFilePath}\" {runArguments} >/dev/null 2>&1 &");
-                                    }
-
-                                    stream.WriteLine("  sleep 1"); // Let the process start
-                                    stream.WriteLine("  if ps -p $! >/dev/null; then");
-                                    stream.WriteLine("    echo \"- Success: Application running (PID: $!)\"");
-                                    stream.WriteLine("  else");
-                                    stream.WriteLine("    echo \"- Error: Process failed to start\"");
-                                    stream.WriteLine("  fi");
-                                    stream.WriteLine("else");
-                                    stream.WriteLine($"  echo \"- File not found: {newExecutingFilePath}, not executing!\"");
-                                    stream.WriteLine("fi");
+                                    stream.WriteLine($"    nohup \"{Environment.ProcessPath}\" \"${nameof(EntryApplication.ExecutablePath)}\" $RUN_ARGUMENTS >/dev/null 2>&1 &");
                                 }
                                 else
                                 {
-                                    stream.WriteLine("echo \"- Skip execution of application, by the configuration or unable to locate the entry point.\"");
+                                    // Make executable if it's not
+                                    stream.WriteLine($"    chmod +x \"${nameof(EntryApplication.ExecutablePath)}\"");
+                                    stream.WriteLine($"    nohup \"${nameof(EntryApplication.ExecutablePath)}\" $RUN_ARGUMENTS >/dev/null 2>&1 &");
                                 }
-
+                                stream.WriteLine("    sleep 1"); // Let the process start
+                                stream.WriteLine("    if ps -p $! >/dev/null; then");
+                                stream.WriteLine("      echo \"- Success: Application running (PID: $!)\"");
+                                stream.WriteLine("    else");
+                                stream.WriteLine("      echo \"- Error: Process failed to start\"");
+                                stream.WriteLine("    fi");
+                                stream.WriteLine("  else");
+                                stream.WriteLine($"    echo \"- File not found: ${nameof(EntryApplication.ExecutablePath)}, not executing!\"");
+                                stream.WriteLine("  fi");
+                                stream.WriteLine("else");
+                                stream.WriteLine("  echo \"- Skip execution of application (RUN_AFTER_UPGRADE is not true).\"");
+                                stream.WriteLine("fi");
                                 stream.WriteLine();
 
                                 // Cleanup
                                 stream.WriteLine("echo \"- Removing temp source files\"");
-                                stream.WriteLine("rm -f \"$DOWNLOAD_FILEPATH\"");
+                                stream.WriteLine("if [ -z \"${SOURCE_PATH}\" ] || [ \"${SOURCE_PATH}\" = \"/\" ]; then");
+                                stream.WriteLine("  echo \"- Error: Refusing to remove SOURCE_PATH='${SOURCE_PATH}'\"");
+                                stream.WriteLine("  exit 1");
+                                stream.WriteLine("fi");
+                                stream.WriteLine("if [ -z \"${DEST_PATH}\" ] || [ \"${DEST_PATH}\" = \"/\" ]; then");
+                                stream.WriteLine("  echo \"- Error: Refusing to use DEST_PATH='${DEST_PATH}'\"");
+                                stream.WriteLine("  exit 1");
+                                stream.WriteLine("fi");
+                                stream.WriteLine();
                                 stream.WriteLine("rm -rf \"$SOURCE_PATH\"");
                                 stream.WriteLine();
 
-#if !DEBUG
-                                stream.WriteLine("echo \"- Removing self\"");
-                                stream.WriteLine("rm -f -- \"$0\"");
-#endif
-
-                                stream.WriteLine("echo \"- Completed\"");
-                                stream.WriteLine("# End of script");
+                                WriteLinuxScriptEnd(stream);
                             }
 
                             // Make the script executable
@@ -1358,92 +1482,58 @@ public partial class UpdatumManager : INotifyPropertyChanged
                                 });
                         }
 
-                        Environment.Exit(0);
+                        if (forceTerminate) Environment.Exit(0);
+                        return true;
                     }
                 }
 
-                ///////////////////////////////////////////////////////////
-                // Handle single-file apps / executables for all systems //
-                ///////////////////////////////////////////////////////////
-                if (fileExtension == string.Empty
-                    || fileExtension.Equals(LinuxAppImageFileExtension, StringComparison.OrdinalIgnoreCase)
-                    || (fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && EntryApplication.IsSingleFileApp)
-                    )
+                ////////////////////////
+                // Windows Installers //
+                ////////////////////////
+                if (Utilities.IsWindowsInstallerFile(filePath))
                 {
-                    if (fileExtension == string.Empty && OperatingSystem.IsWindows())
-                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Unix systems.");
-                    if (fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsWindows())
-                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
-                    if (fileExtension.Equals(LinuxAppImageFileExtension, StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsLinux())
-                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Linux.");
+                    //if (!OperatingSystem.IsWindows()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
 
-
-                    var currentExecutablePath = EntryApplication.ExecutablePath;
-                    var targetDirectoryPath = EntryApplication.BaseDirectory;
-
-                    if (string.IsNullOrWhiteSpace(targetDirectoryPath))
+                    string upgradeScriptFilePath;
+                    using (var stream = CreateScriptFile(out upgradeScriptFilePath))
                     {
-                        if (OperatingSystem.IsLinux())
-                        {
-                            targetDirectoryPath = Utilities.LinuxDefaultApplicationDirectory;
-                            Directory.CreateDirectory(targetDirectoryPath);
-                        }
-                        else if (OperatingSystem.IsMacOS())
-                        {
-                            targetDirectoryPath = Utilities.MacOSDefaultApplicationDirectory;
-                        }
-                        else
-                        {
-                            targetDirectoryPath = Utilities.CommonDefaultApplicationDirectory;
-                        }
-                    }
+                        WriteWindowsScriptHeader(stream);
+                        WriteWindowsScriptFileValidation(stream);
+                        WriteWindowsScriptKillInstances(stream);
+                        WriteWindowsScriptInjectCustomScript(stream);
 
-                    // By defaults uses same filename as currently downloaded
-                    var targetFileName = fileNameNoExt;
+                        stream.WriteLine("echo - Calling the installer");
+                        stream.WriteLine($"start \"\" /WAIT \"%FILEPATH%\" {InstallUpdateWindowsInstallerArguments}");
+                        stream.WriteLine(" REM /WAIT - Start application and wait for it to terminate.");
+                        stream.WriteLine();
 
-                    if (!string.IsNullOrWhiteSpace(currentExecutablePath)) // Infer from executing filename and use it instead
-                    {
-                        var currentExecutableFileName = Path.GetFileName(currentExecutablePath);
-                        targetFileName = Path.GetFileNameWithoutExtension(SanitizeFileNameWithVersion(currentExecutableFileName, newVersionStr));
-                    }
-                    else if (!string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)) // Manual filename
-                    {
-                        targetFileName = string.Format(InstallUpdateSingleFileExecutableName, newVersionStr);
-                    }
+                        stream.WriteLine("if /I \"%RUN_AFTER_UPGRADE%\"==\"True\" (");
+                        stream.WriteLine("  echo - Execute the upgraded application");
+                        stream.WriteLine($"  if exist \"%{nameof(EntryApplication.ExecutablePath)}%\" (");
+                        stream.WriteLine($"    start \"\" \"%{nameof(EntryApplication.ExecutablePath)}%\" %RUN_ARGUMENTS%");
+                        stream.WriteLine("  ) else (");
+                        stream.WriteLine($"    echo - File not found: \"%{nameof(EntryApplication.ExecutablePath)}%\", not executing!");
+                        stream.WriteLine("  )");
+                        stream.WriteLine(") else (");
+                        stream.WriteLine("  echo - Skip execution of application (RUN_AFTER_UPGRADE is not true)");
+                        stream.WriteLine(")");
+                        stream.WriteLine();
 
-                    var targetFilePath = Path.Combine(targetDirectoryPath, $"{targetFileName}{fileExtension}");
 
-                    File.Move(filePath, targetFilePath, true);
-
-                    if (currentExecutablePath != targetFilePath
-                        && !string.IsNullOrWhiteSpace(currentExecutablePath)
-                        && File.Exists(currentExecutablePath))
-                    {
-                        try
-                        {
-                            File.Delete(currentExecutablePath);
-                        }
-                        catch
-                        {
-                            // ignored
-                        }
-                    }
-
-                    // Set executable permissions for non-windows systems
-                    if (!OperatingSystem.IsWindows())
-                    {
-                        // 755 permissions
-                        File.SetUnixFileMode(targetFilePath, Utilities.Unix755FileMode);
+                        WriteWindowsScriptEnd(stream);
                     }
 
                     InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
-                    // Execute the new file
-                    if (runArguments != NoRunAfterUpgradeToken) Utilities.StartProcess(targetFilePath, runArguments);
+                    using var process = Process.Start(
+                        new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                        {
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            WorkingDirectory = tmpPath
+                        });
 
-                    // Exit the application
-                    Environment.Exit(0);
-
+                    if (forceTerminate) Environment.Exit(0); // Exit the application to install
                     return true;
                 }
 
@@ -1475,47 +1565,233 @@ public partial class UpdatumManager : INotifyPropertyChanged
                     return true;
                 }
 
-
-                ////////////////////////
-                // Windows Installers //
-                ////////////////////////
-                if (WindowsInstallerFileExtensions.Contains(fileExtension, StringComparer.OrdinalIgnoreCase))
+                ///////////////////////////////////////////////////////////
+                // Handle single-file apps / executables for all systems //
+                ///////////////////////////////////////////////////////////
+                if (fileExtension == string.Empty
+                    || fileExtension.Equals(LinuxAppImageFileExtension, StringComparison.OrdinalIgnoreCase)
+                    || fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!OperatingSystem.IsWindows()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
+                    if (fileExtension == string.Empty && OperatingSystem.IsWindows())
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Unix systems.");
+                    if (fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsWindows())
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
+                    if (fileExtension.Equals(LinuxAppImageFileExtension, StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsLinux())
+                        throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Linux.");
 
-                    InstallUpdateCompleted?.Invoke(this, downloadedAsset);
-                    //Utilities.StartProcess(filePath, InstallUpdateWindowsInstallerArguments); // OLD WAY
 
-                    var upgradeScriptFilePath = Path.Combine(tmpPath, $"{fileNameNoExt}-UpdatumAutoUpgrade.bat");
+                    var currentExecutablePath = EntryApplication.ExecutablePath;
+                    var targetDirectoryPath = EntryApplication.BaseDirectory;
 
-                    using (var stream = File.CreateText(upgradeScriptFilePath))
+                    if (string.IsNullOrWhiteSpace(targetDirectoryPath))
                     {
-                        WriteWindowsScriptHeader(stream);
-                        WriteWindowsScriptDownloadedFileValidation(stream);
-                        WriteWindowsScriptKillInstances(stream);
-                        WriteWindowsScriptInjectCustomScript(stream);
+                        if (OperatingSystem.IsLinux())
+                        {
+                            targetDirectoryPath = Utilities.LinuxDefaultApplicationDirectory;
+                            Directory.CreateDirectory(targetDirectoryPath);
+                        }
+                        else if (OperatingSystem.IsMacOS())
+                        {
+                            targetDirectoryPath = Utilities.MacOSDefaultApplicationDirectory;
+                        }
+                        else
+                        {
+                            targetDirectoryPath = Utilities.CommonDefaultApplicationDirectory;
+                        }
+                    }
 
-                        stream.WriteLine("echo - Calling the installer");
-                        stream.WriteLine($"start \"\" /WAIT \"%DOWNLOAD_FILEPATH%\" {InstallUpdateWindowsInstallerArguments}");
-                        stream.WriteLine(" REM /WAIT - Start application and wait for it to terminate.");
-                        stream.WriteLine();
+                    // By defaults uses same filename as currently downloaded
+                    var targetFileName = fileNameNoExt;
+                    var currentExecutableFileName = Path.GetFileName(currentExecutablePath);
 
-                        WriteWindowsScriptEnd(stream);
+                    // Infer from executing filename and use it if the first 3 characters are the same,
+                    // assume it's the same base name and just change the version part
+                    if (!string.IsNullOrWhiteSpace(currentExecutablePath)
+                        && !string.IsNullOrWhiteSpace(currentExecutableFileName)
+                        && !string.IsNullOrWhiteSpace(targetFileName)
+                        && currentExecutableFileName.Length >= 3 && targetFileName.Length >= 3
+                        && currentExecutableFileName[0] == targetFileName[0]
+                        && currentExecutableFileName[1] == targetFileName[1]
+                        && currentExecutableFileName[2] == targetFileName[2])
+                    {
+                        targetFileName = Path.GetFileNameWithoutExtension(SanitizeFileNameWithVersion(currentExecutableFileName, newVersionStr));
+                    }
+                    else if (!string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)) // Manual filename
+                    {
+                        targetFileName = string.Format(InstallUpdateSingleFileExecutableName, newVersionStr);
+                    }
+
+                    var targetFilePath = Path.Combine(targetDirectoryPath, $"{targetFileName}{fileExtension}");
+
+                    /*File.Move(filePath, targetFilePath, true);
+
+                    if (currentExecutablePath != targetFilePath
+                        && !string.IsNullOrWhiteSpace(currentExecutablePath)
+                        && File.Exists(currentExecutablePath))
+                    {
+                        try
+                        {
+                            File.Delete(currentExecutablePath);
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                    }
+
+                    // Set executable permissions for non-windows systems
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        // 755 permissions
+                        File.SetUnixFileMode(targetFilePath, Utilities.Unix755FileMode);
                     }
 
                     InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
-                    using var process = Process.Start(
-                        new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                    // Execute the new file
+                    if (runArguments != NoRunAfterUpgradeToken) Utilities.StartProcess(targetFilePath, runArguments);
+
+                    // Exit the application
+                    if (forceTerminate) Environment.Exit(0);
+                    */
+
+                    // New WITH script
+                    if (OperatingSystem.IsWindows())
+                    {
+
+                        string upgradeScriptFilePath;
+                        using (var stream = CreateScriptFile(out upgradeScriptFilePath))
                         {
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            WorkingDirectory = tmpPath
-                        });
+                            WriteWindowsScriptHeader(stream);
+                            stream.WriteLine($"set \"SOURCE_FILEPATH={Utilities.BatchSetValue(filePath)}\"");
+                            stream.WriteLine($"set \"TARGET_FILEPATH={Utilities.BatchSetValue(targetFilePath)}\"");
+                            stream.WriteLine();
 
-                    Environment.Exit(0); // Exit the application to install
+                            // Source path verification
+                            stream.WriteLine("if not exist \"%SOURCE_FILEPATH%\" (");
+                            stream.WriteLine("  echo - Error: Source file does not exist");
+                            stream.WriteLine("  exit /b 1");
+                            stream.WriteLine(')');
+                            stream.WriteLine();
 
-                    return true;
+                            WriteWindowsScriptKillInstances(stream);
+                            WriteWindowsScriptInjectCustomScript(stream);
+
+
+                            stream.WriteLine("echo - Moving the program file");
+                            stream.WriteLine("move /Y \"%SOURCE_FILEPATH%\" \"%TARGET_FILEPATH%\"");
+                            stream.WriteLine();
+
+                            stream.WriteLine($"if /I \"%RUN_AFTER_UPGRADE%\"==\"True\" (");
+                            stream.WriteLine($"  echo - Execute the upgraded application");
+                            stream.WriteLine($"  if exist \"%TARGET_FILEPATH%\" (");
+                            stream.WriteLine($"    start \"\" \"%TARGET_FILEPATH%\" %RUN_ARGUMENTS%");
+                            stream.WriteLine($"  ) else (");
+                            stream.WriteLine($"    echo - File not found: \"%TARGET_FILEPATH%\", not executing!");
+                            stream.WriteLine($"  )");
+                            stream.WriteLine($") else (");
+                            stream.WriteLine($"  echo - Skip execution of application (RUN_AFTER_UPGRADE is not true)");
+                            stream.WriteLine($")");
+                            stream.WriteLine();
+
+
+                            WriteWindowsScriptEnd(stream);
+                        }
+
+                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+
+                        using var process = Process.Start(
+                            new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                            {
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                                WorkingDirectory = tmpPath
+                            });
+
+
+                        if (forceTerminate) Environment.Exit(0); // Exit the application to install
+
+                        return true;
+                    }
+                    else
+                    {
+                        string upgradeScriptFilePath;
+                        using (var stream = CreateScriptFile(out upgradeScriptFilePath))
+                        {
+                            WriteLinuxScriptHeader(stream);
+                            stream.WriteLine($"SOURCE_FILEPATH={Utilities.BashAnsiCString(filePath)}");
+                            stream.WriteLine($"TARGET_FILEPATH={Utilities.BashAnsiCString(targetFilePath)}");
+                            stream.WriteLine();
+
+                            // Source path verification
+                            stream.WriteLine("if [ ! -f \"$SOURCE_FILEPATH\" ]; then");
+                            stream.WriteLine("  echo \"- Error: Source filepath does not exist\"");
+                            stream.WriteLine("  exit 1");
+                            stream.WriteLine("fi");
+                            stream.WriteLine();
+
+                            WriteLinuxScriptKillInstances(stream);
+                            WriteLinuxScriptInjectCustomScript(stream);
+
+                            stream.WriteLine("echo \"- Moving the program file\"");
+                            stream.WriteLine("mkdir -p \"$(dirname \"$TARGET_FILEPATH\")\"");
+                            stream.WriteLine("mv -f \"$SOURCE_FILEPATH\" \"$TARGET_FILEPATH\"");
+                            stream.WriteLine();
+
+                            stream.WriteLine("echo \"- Set permission\"");
+                            stream.WriteLine("chmod +x \"$TARGET_FILEPATH\"");
+                            stream.WriteLine();
+
+                            if (OperatingSystem.IsMacOS())
+                            {
+                                stream.WriteLine("echo \"- Removing com.apple.quarantine flag\"");
+                                stream.WriteLine("xattr -d com.apple.quarantine \"$TARGET_FILEPATH\" &> /dev/null || true");
+                                stream.WriteLine();
+
+                                if (InstallUpdateCodesignMacOSApp)
+                                {
+                                    stream.WriteLine("echo \"- Force codesign to allow the app to run directly\"");
+                                    stream.WriteLine("codesign --force --deep --sign - \"$TARGET_FILEPATH\" || true");
+                                    stream.WriteLine();
+                                }
+                            }
+
+                            // Execute the upgraded application
+                            stream.WriteLine("if [[ \"${RUN_AFTER_UPGRADE:-False}\" = \"True\" ]]; then");
+                            stream.WriteLine("  if [[ -f \"$TARGET_FILEPATH\" ]]; then");
+                            stream.WriteLine("    echo \"- Execute the upgraded application\"");
+                            stream.WriteLine($"    nohup \"$TARGET_FILEPATH\" $RUN_ARGUMENTS >/dev/null 2>&1 &");
+                            stream.WriteLine("    sleep 1"); // Let the process start
+                            stream.WriteLine("    if ps -p $! >/dev/null; then");
+                            stream.WriteLine("      echo \"- Success: Application running (PID: $!)\"");
+                            stream.WriteLine("    else");
+                            stream.WriteLine("      echo \"- Error: Process failed to start\"");
+                            stream.WriteLine("    fi");
+                            stream.WriteLine("  else");
+                            stream.WriteLine("    echo \"- File not found: $TARGET_FILEPATH, not executing!\"");
+                            stream.WriteLine("  fi");
+                            stream.WriteLine("else");
+                            stream.WriteLine("  echo \"- Skip execution of application (RUN_AFTER_UPGRADE is not true)\"");
+                            stream.WriteLine("fi");
+                            stream.WriteLine();
+
+                            WriteLinuxScriptEnd(stream);
+                        }
+
+                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+
+                        using var process = Process.Start(
+                            new ProcessStartInfo("/bin/bash", $"\"{upgradeScriptFilePath}\"")
+                            {
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                                WorkingDirectory = tmpPath
+                            });
+
+                        if (forceTerminate) Environment.Exit(0); // Exit the application to install
+
+                        return true;
+                    }
                 }
 
                 // Unable to find a valid file type to install
@@ -1644,4 +1920,30 @@ public partial class UpdatumManager : INotifyPropertyChanged
 
     #endregion
 
+    #region Dispose
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the resources used by the <see cref="UpdatumManager"/>.
+    /// </summary>
+    /// <param name="disposing"></param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _autoUpdateCheckTimer?.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    #endregion
 }

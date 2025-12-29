@@ -16,9 +16,9 @@ internal static class Utilities
     /// <summary>
     /// Gets the unix file mode for 775 permissions.
     /// </summary>
-    public const UnixFileMode Unix755FileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute  |
-                                                UnixFileMode.GroupRead                         | UnixFileMode.GroupExecute |
-                                                UnixFileMode.OtherRead                         | UnixFileMode.OtherExecute;
+    public const UnixFileMode Unix755FileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                                                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                                                UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
     /// <summary>
     /// Gets the default applications directory for linux.
     /// </summary>
@@ -33,6 +33,35 @@ internal static class Utilities
     /// Gets the default applications directory that is common to all systems if the others are not available.
     /// </summary>
     public static string CommonDefaultApplicationDirectory => Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+
+    private const byte ObfuscationKey = 0xA5;
+
+    // Version Info Keywords (lower case)
+    private static readonly byte[][] FileInfoSignatureBytes =
+    [
+        [0xD6, 0xC0, 0xD1, 0xD0, 0xD5], // setup
+        [0xCC, 0xCB, 0xD6, 0xD1, 0xC4, 0xC9, 0xC9], // install
+        [0xCC, 0xCB, 0xCB, 0xCA], // inno
+        [0xCB, 0xD0, 0xC9, 0xC9, 0xD6, 0xCA, 0xC3, 0xD1], // nullsoft
+        [0xCB, 0xD6, 0xCC, 0xD6], // nsis
+        [0xD2, 0xCC, 0xDD] // wix
+    ];
+
+    // File Signatures
+    private static readonly byte[][] FileSignatureBytes =
+    [
+        [0xEC, 0xCB, 0xCB, 0xCA, 0x85, 0xF6, 0xC0, 0xD1, 0xD0, 0xD5], // Inno Setup
+        [0xEF, 0xF7, 0x8B, 0xEC, 0xCB, 0xCB, 0xCA, 0x8B, 0xF6, 0xC0, 0xD1, 0xD0, 0xD5], // JR.Inno.Setup
+        [0xEB, 0xD0, 0xC9, 0xC9, 0xD6, 0xCA, 0xC3, 0xD1, 0xEC, 0xCB, 0xD6, 0xD1], // NullsoftInst
+        [0xEB, 0xD0, 0xC9, 0xC9, 0xD6, 0xCA, 0xC3, 0xD1], // Nullsoft
+        [0xF2, 0xCC, 0xCB, 0xC1, 0xCA, 0xD2, 0xD6, 0x85, 0xEC, 0xCB, 0xD6, 0xD1, 0xC4, 0xC9, 0xC9, 0xC0, 0xD7], // Windows Installer
+        [0xEC, 0xCB, 0xD6, 0xD1, 0xC4, 0xC9, 0xC9, 0xF6, 0xCD, 0xCC, 0xC0, 0xC9, 0xC1], // InstallShield
+        [0xE4, 0xC1, 0xD3, 0xC4, 0xCB, 0xC6, 0xC0, 0xC1, 0x85, 0xEC, 0xCB, 0xD6, 0xD1, 0xC4, 0xC9, 0xC9, 0xC0, 0xD7], // Advanced Installer
+        [0xF2, 0xCC, 0xD6, 0xC0, 0x85, 0xEC, 0xCB, 0xD6, 0xD1, 0xC4, 0xC9, 0xC9, 0xC4, 0xD1, 0xCC, 0xCA, 0xCB], // Wise Installation
+        [0xF6, 0xC0, 0xD1, 0xD0, 0xD5, 0x85, 0xE3, 0xC4, 0xC6, 0xD1, 0xCA, 0xD7, 0xDC], // Setup Factory
+        [0xEB, 0xF6, 0xEC, 0xF6], // NSIS
+        //[0xF2, 0xCC, 0xFD] // WiX
+    ];
 
     /// <summary>
     /// Starts a process with the given name and arguments.
@@ -87,6 +116,7 @@ internal static class Utilities
         return tmpDir;
     }
 
+
     /// <summary>
     /// Determines whether the specified file is a Windows setup or installer executable based on common installer
     /// signatures.
@@ -99,7 +129,7 @@ internal static class Utilities
     /// installer signatures. The check is case-insensitive and scans both the beginning and end of large files for
     /// efficiency.</remarks>
     /// <returns>true if the file is recognized as a setup or installer executable; otherwise, false.</returns>
-    public static bool IsWindowsInstallerFile(string filePath)
+    public static bool IsWindowsInstallerFile(string? filePath)
     {
         if (!OperatingSystem.IsWindows()) return false;
         if (!File.Exists(filePath)) return false;
@@ -110,46 +140,14 @@ internal static class Utilities
         {
             // First, check version info comments and description for installer keywords
             var versionInfo = FileVersionInfo.GetVersionInfo(filePath);
-            if (versionInfo.Comments is not null)
+            var fileCommentsDescription = $"{versionInfo.Comments}{versionInfo.FileDescription}";
+            if (!string.IsNullOrWhiteSpace(fileCommentsDescription))
             {
-                ReadOnlySpan<string> searchWords =
-                [
-                    "setup",
-                    "install",
-                    "inno",
-                    "nullsoft",
-                    "nsis",
-                    "wix",
-                ];
-
-
-#if NET10_0_OR_GREATER
-                var searchValues = SearchValues.Create(searchWords, StringComparison.OrdinalIgnoreCase);
-              //  if (!string.IsNullOrWhiteSpace(versionInfo.Comments) && versionInfo.Comments.ContainsAny(searchValues)) return true;
-              //  if (!string.IsNullOrWhiteSpace(versionInfo.FileDescription) && versionInfo.FileDescription.ContainsAny(searchValues)) return true;
-#elif NET9_0_OR_GREATER
-                // .NET 9 supports SearchValues<string>, but the "string.ContainsAny(SearchValues<string>)"
-                // convenience is .NET 10+. Use the Span-based API instead.
-                // We could use this branch for .NET 10+ as well, but keeping separate for clarity.
-                var searchValues = SearchValues.Create(searchWords, StringComparison.OrdinalIgnoreCase);
-
-                if (!string.IsNullOrWhiteSpace(versionInfo.Comments) && versionInfo.Comments.AsSpan().ContainsAny(searchValues)) return true;
-                if (!string.IsNullOrWhiteSpace(versionInfo.FileDescription) && versionInfo.FileDescription.AsSpan().ContainsAny(searchValues)) return true;
-#elif NET8_0_OR_GREATER
-                // .NET 8 doesn't have SearchValues<string> substring search. Fallback to a loop.
-                if (!string.IsNullOrWhiteSpace(versionInfo.Comments) && ContainsAnyOrdinalIgnoreCase(versionInfo.Comments, searchWords)) return true;
-                if (!string.IsNullOrWhiteSpace(versionInfo.FileDescription) && ContainsAnyOrdinalIgnoreCase(versionInfo.FileDescription, searchWords)) return true;
-
-                static bool ContainsAnyOrdinalIgnoreCase(string haystack, ReadOnlySpan<string> needles)
+                var span = fileCommentsDescription.AsSpan();
+                foreach (var bytes in FileInfoSignatureBytes)
                 {
-                    foreach (var needle in needles)
-                    {
-                        if (!string.IsNullOrWhiteSpace(needle) && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
-                    }
-
-                    return false;
+                    if (HasEncodedSignature(span, bytes)) return true;
                 }
-#endif
             }
 
             using var stream = new FileStream(
@@ -203,47 +201,10 @@ internal static class Utilities
                 }
 
                 // Check installer signatures (ordered by likelihood)
-                // Inno Setup - most common
-                if (span.IndexOf("Inno Setup"u8) >= 0 ||
-                    //span.IndexOf("inno"u8) >= 0 ||
-                    span.IndexOf("JR.Inno.Setup"u8) >= 0)
+                foreach (var signatureByte in FileSignatureBytes)
                 {
-                    return true;
+                    if (HasEncodedSignature(span, signatureByte)) return true;
                 }
-
-                // NSIS
-                if (span.IndexOf("Nullsoft"u8) >= 0 ||
-                    span.IndexOf("NSIS"u8) >= 0 ||
-                    span.IndexOf("NullsoftInst"u8) >= 0)
-                {
-                    return true;
-                }
-
-                // InstallShield
-                if (span.IndexOf("InstallShield"u8) >= 0) return true;
-
-                // WiX / Windows Installer
-                if (span.IndexOf("WiX"u8) >= 0 ||
-                    span.IndexOf("Windows Installer"u8) >= 0)
-                {
-                    return true;
-                }
-
-                // Advanced Installer
-                if (span.IndexOf("Advanced Installer"u8) >= 0) return true;
-
-                // Wise Installation
-                if (span.IndexOf("Wise Installation"u8) >= 0) return true;
-
-                // Setup Factory
-                if (span.IndexOf("Setup Factory"u8) >= 0) return true;
-
-                // Generic setup indicators
-                //if (span.IndexOf("Setup"u8) >= 0 &&
-                //    (span.IndexOf("Installer"u8) >= 0 || span.IndexOf("Installation"u8) >= 0))
-                //{
-                //    return true;
-                //}
             }
             finally
             {
@@ -259,10 +220,87 @@ internal static class Utilities
     }
 
     /// <summary>
+    /// Determines whether the specified data contains the given encoded signature after decoding.
+    /// </summary>
+    /// <param name="data">The data to search for the decoded signature within.</param>
+    /// <param name="encodedSignature">The encoded signature to decode and search for in the data. Each byte is expected to be obfuscated and will be
+    /// decoded before comparison.</param>
+    /// <returns>true if the decoded signature is found within the data; otherwise, false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool HasEncodedSignature(ReadOnlySpan<byte> data, ReadOnlySpan<byte> encodedSignature)
+    {
+        if (data.Length < encodedSignature.Length) return false;
+
+        Span<byte> decoded = stackalloc byte[encodedSignature.Length];
+        for (var i = 0; i < encodedSignature.Length; i++)
+        {
+            decoded[i] = (byte)(encodedSignature[i] ^ ObfuscationKey);
+        }
+
+        return data.IndexOf(decoded) >= 0;
+    }
+
+    /// <summary>
+    /// Determines whether the specified character span contains the given encoded signature after decoding.
+    /// </summary>
+    /// <remarks>The encoded signature is decoded using an internal obfuscation key before performing the
+    /// search. The method returns false if the data span is shorter than the encoded signature.</remarks>
+    /// <param name="data">The span of characters to search for the decoded signature.</param>
+    /// <param name="encodedSignature">The encoded signature as a span of bytes. Each byte will be decoded before searching.</param>
+    /// <returns>true if the decoded signature is found within the data span; otherwise, false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool HasEncodedSignature(ReadOnlySpan<char> data, ReadOnlySpan<byte> encodedSignature)
+    {
+        if (data.Length < encodedSignature.Length) return false;
+
+        Span<char> decoded = stackalloc char[encodedSignature.Length];
+        for (var i = 0; i < encodedSignature.Length; i++)
+        {
+            decoded[i] = (char)(encodedSignature[i] ^ ObfuscationKey);
+        }
+
+        return data.IndexOf(decoded) >= 0;
+    }
+
+    /// <summary>
+    /// Decodes a UTF-8 encoded string from a span of bytes that have been obfuscated with a predefined key.
+    /// </summary>
+    /// <remarks>Each byte in the input span is de-obfuscated using a bitwise XOR with a predefined key before
+    /// decoding. The method assumes the original data was UTF-8 encoded and obfuscated using the same key.</remarks>
+    /// <param name="encoded">A read-only span of bytes representing the obfuscated UTF-8 encoded string to decode.</param>
+    /// <returns>A string containing the decoded text represented by the input span.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static string GetDecodedString(ReadOnlySpan<byte> encoded)
+    {
+        Span<byte> decoded = stackalloc byte[encoded.Length];
+        for (var i = 0; i < encoded.Length; i++)
+        {
+            decoded[i] = (byte)(encoded[i] ^ ObfuscationKey);
+        }
+        return Encoding.UTF8.GetString(decoded);
+    }
+
+    /// <summary>
+    /// Encodes a string using the obfuscation key.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static byte[] GetEncodedBytes(string? value)
+    {
+        if (value is null) return [];
+        var bytes = Encoding.UTF8.GetBytes(value);
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = (byte)(bytes[i] ^ ObfuscationKey);
+        }
+        return bytes;
+    }
+
+    /// <summary>
     /// Bash-safe one-line string literal that preserves special characters (including newlines)
     /// using ANSI-C quoting: $'...'
     /// </summary>
-    public static string BashAnsiCString(object? value)
+    /// <exception cref="ArgumentException"></exception>
+    internal static string BashAnsiCString(object? value)
     {
         if (value is null) return "$''";
 
@@ -275,7 +313,7 @@ internal static class Utilities
 
 
         if (strValue.Contains('\0'))
-            throw new ArgumentException("Bash strings cannot contain NUL (\\0).", nameof(strValue));
+            throw new ArgumentException("Bash strings cannot contain NUL (\\0).");
 
         // Pre-calculate approximate capacity (most chars don't need escaping)
         var sb = new StringBuilder(strValue.Length + strValue.Length / 4 + 3);
@@ -315,7 +353,7 @@ internal static class Utilities
     /// - Escapes: ^, %, !, "
     ///   - ! is escaped to survive when Delayed Expansion is ON.
     /// </summary>
-    public static string BatchSetValue(object? value)
+    internal static string BatchSetValue(object? value)
     {
         if (value is null) return string.Empty;
 
@@ -361,6 +399,5 @@ internal static class Utilities
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static char HexDigit(int value)
-        => (char)(value < 10 ? '0' + value : 'A' + value - 10);
+    private static char HexDigit(int value) => (char)(value < 10 ? '0' + value : 'A' + value - 10);
 }

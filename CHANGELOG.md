@@ -1,3 +1,9 @@
+# v1.3.1 (29/12/2025)
+- Add `InstallUpdateWindowsExeType` property to strict indicate the type of .exe (Auto, Installer, SingleFileApp)
+- Only remove the self upgrade script on Release builds
+- Fix unable to remove the self upgrade script under windows
+- Fix and encode the raw strings of setup signatures to not show under single-file apps
+
 # v1.3.0 (28/12/2025)
 - Add `GetApplicationInfoString` and `GetApplicationInfoDict` methods to `EntryApplication`
 - Add `ProcessId` property to `EntryApplication`

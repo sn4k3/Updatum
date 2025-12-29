@@ -16,6 +16,12 @@ internal class Program
         // Regex filter to get the correct asset from running system
         // Defaults would work here too: EntryApplication.GenericRuntimeIdentifier
         AssetRegexPattern = $"^{RepositoryName}_{EntryApplication.GenericRuntimeIdentifier}_v",
+        // Specifies the type of windows .exe being used in the assets.
+        // It is highly recommended to set this when having .exe assets.
+        // - When asset is an installer, set to Installer.
+        // - When asset is a single file executable, set to SingleFileExecutable.
+        // - When having both asset types, set to Auto.
+        InstallUpdateWindowsExeType = UpdatumWindowsExeType.Installer,
         // Displays a basic user interface for MSI package
         // This will show the installer UI installing without any interaction
         InstallUpdateWindowsInstallerArguments = "/qb",

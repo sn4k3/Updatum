@@ -411,3 +411,40 @@ var updateFound = await AppUpdater.CheckForUpdatesAsync(new Version());
 ```
 </details>
 
+
+
+<details>
+<summary>My installer (.exe) or single-file app (.exe) does not upgrade</summary>
+
+### Installers (.exe) and single-file apps
+
+Windows executables (.exe) can be either a installer or a single-file application.  
+- Installer requires executing and install by it own.  
+- Single-file applications requires replacing the current executable with the new one.
+
+The problem arises when the asset is a .exe file, and Updatum cannot determine if it is a installer or a single-file application
+and then choose the wrong upgrade strategy.  
+By default it tries to infer based on file signatures, such as: Inno Setup, NSIS, Nullsoft, InstallShield, Windows Installer, etc.
+which can also lead to false positives if your single-file application contains such signatures from typical raw strings or if
+the installer does not include those signatures due a odd installer build.
+
+#### Solution
+
+Use the property `InstallUpdateWindowsExeType` to explicitly indicate the asset type to either `Installer` or `SingleFileApp`.
+
+```csharp
+internal static readonly UpdatumManager AppUpdater = new(RepositoryOwner, RepositoryName)
+{
+    // Specifies the type of windows .exe being used in the assets.
+    // It is highly recommended to set this when having .exe assets.
+    // - When asset is an installer, set to Installer.
+    // - When asset is a single file executable, set to SingleFileExecutable.
+    // - When having both asset types, set to Auto.
+    InstallUpdateWindowsExeType = UpdatumWindowsExeType.Installer,
+
+    // ...
+    // ...
+    // ...
+};
+```
+</details>

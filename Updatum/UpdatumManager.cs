@@ -153,6 +153,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     private double _downloadProgressUpdateFrequencySeconds = 0.1; // 10 FPS
     private long _downloadSizeBytes = -1;
     private long _downloadedBytes;
+    private UpdatumWindowsExeType _installUpdateWindowsExeType;
     private string? _installUpdateWindowsInstallerArguments;
     private string? _installUpdateSingleFileExecutableName;
     private string? _installUpdateInjectCustomScript;
@@ -380,6 +381,22 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     /// Gets the current downloaded percentage of the progress from 0% to 100%.
     /// </summary>
     public double DownloadedPercentage => DownloadSizeBytes > 0 ? Math.Round(DownloadedBytes / (double)DownloadSizeBytes * 100.0, 2, MidpointRounding.AwayFromZero) : 0.0;
+
+    /// <summary>
+    /// Gets or sets the type of Windows executable used to install updates.<br/>
+    /// Use <see cref="UpdatumWindowsExeType.Auto"/> to let the updater infer the type based on the asset file signature.<br/>
+    /// Use <see cref="UpdatumWindowsExeType.Installer"/> for installer packages (.exe installers).<br/>
+    /// Use <see cref="UpdatumWindowsExeType.SingleFileApp"/> for single-file executables (.exe).<br/>
+    /// </summary>
+    /// <remarks>Executable files (.exe) can either be installers or single-file apps, the recommendations are:<br/>
+    /// - If you have the two types on your assets leave this to <see cref="UpdatumWindowsExeType.Auto"/>,
+    /// this can lead to false positives if your app have raw strings that share installer signatures, eg. 'Inno Setup'.<br/>
+    /// - If you build and only have single-file app or installer, configure accordingly to prevent false positives.</remarks>
+    public UpdatumWindowsExeType InstallUpdateWindowsExeType
+    {
+        get => _installUpdateWindowsExeType;
+        set => RaiseAndSetIfChanged(ref _installUpdateWindowsExeType, value);
+    }
 
     /// <summary>
     /// Gets or sets the arguments to pass to the installer when using the auto installer under Windows.
@@ -890,6 +907,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     /// <exception cref="FileNotFoundException">Thrown if the file specified by downloadedAsset does not exist.</exception>
     /// <exception cref="NotSupportedException">Thrown if the update file type is not supported on the current operating system.</exception>
     /// <exception cref="IOException">Thrown if an error occurs during installation, such as a failure to install a Flatpak package.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
     public Task<bool> InstallUpdateAsync(UpdatumDownloadedAsset downloadedAsset, bool forceTerminate = true, string? runArguments = null)
     {
         if (!downloadedAsset.FileExists) throw new FileNotFoundException("File not found", downloadedAsset.FilePath);
@@ -1040,11 +1058,12 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             stream.WriteLine(" REM /Q - Quiet mode, do not ask if ok to delete on global wildcard.");
             stream.WriteLine();
 
-#if RELEASE
-            stream.WriteLine("echo - Removing self");
-            stream.WriteLine("start \"\" /b cmd /c \"timeout /t 1 >nul & del /f /q \\\"%~f0\\\"\"");
+
+            stream.WriteLine($"if \"%{nameof(EntryApplication.AssemblyConfiguration)}%\"==\"Release\" (");
+            stream.WriteLine("  echo - Removing self");
+            stream.WriteLine("  start \"\" /b cmd /c \"timeout /t 1 >nul & del /f /q \"\"%~f0\"\"\"");
+            stream.WriteLine(")");
             stream.WriteLine();
-#endif
 
             stream.WriteLine("endlocal");
             stream.WriteLine("echo - Completed");
@@ -1150,10 +1169,11 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             stream.WriteLine("[[ -n \"$FILEPATH\" && \"$FILEPATH\" != \"/\" && \"$FILEPATH\" != \"\\\" && -e \"$FILEPATH\" ]] && rm -f -- \"$FILEPATH\"");
             stream.WriteLine();
 
-#if RELEASE
-            stream.WriteLine("echo \"- Removing self\"");
-            stream.WriteLine("rm -f -- \"$0\"");
-#endif
+            stream.WriteLine($"if [ \"${nameof(EntryApplication.AssemblyConfiguration)}\" = \"Release\" ]; then");
+            stream.WriteLine("  echo \"- Removing self\"");
+            stream.WriteLine("  rm -f -- \"$0\"");
+            stream.WriteLine("fi");
+
 
             stream.WriteLine("echo \"- Completed\"");
             stream.WriteLine("# End of script");
@@ -1490,51 +1510,76 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                 ////////////////////////
                 // Windows Installers //
                 ////////////////////////
-                if (Utilities.IsWindowsInstallerFile(filePath))
+                if (OperatingSystem.IsWindows())
                 {
-                    //if (!OperatingSystem.IsWindows()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
-
-                    string upgradeScriptFilePath;
-                    using (var stream = CreateScriptFile(out upgradeScriptFilePath))
+                    var isWindowsInstaller = false;
+                    if (fileExtension.Equals(".msi", StringComparison.OrdinalIgnoreCase))
                     {
-                        WriteWindowsScriptHeader(stream);
-                        WriteWindowsScriptFileValidation(stream);
-                        WriteWindowsScriptKillInstances(stream);
-                        WriteWindowsScriptInjectCustomScript(stream);
-
-                        stream.WriteLine("echo - Calling the installer");
-                        stream.WriteLine($"start \"\" /WAIT \"%FILEPATH%\" {InstallUpdateWindowsInstallerArguments}");
-                        stream.WriteLine(" REM /WAIT - Start application and wait for it to terminate.");
-                        stream.WriteLine();
-
-                        stream.WriteLine("if /I \"%RUN_AFTER_UPGRADE%\"==\"True\" (");
-                        stream.WriteLine("  echo - Execute the upgraded application");
-                        stream.WriteLine($"  if exist \"%{nameof(EntryApplication.ExecutablePath)}%\" (");
-                        stream.WriteLine($"    start \"\" \"%{nameof(EntryApplication.ExecutablePath)}%\" %RUN_ARGUMENTS%");
-                        stream.WriteLine("  ) else (");
-                        stream.WriteLine($"    echo - File not found: \"%{nameof(EntryApplication.ExecutablePath)}%\", not executing!");
-                        stream.WriteLine("  )");
-                        stream.WriteLine(") else (");
-                        stream.WriteLine("  echo - Skip execution of application (RUN_AFTER_UPGRADE is not true)");
-                        stream.WriteLine(")");
-                        stream.WriteLine();
-
-
-                        WriteWindowsScriptEnd(stream);
+                        isWindowsInstaller = true;
+                    }
+                    else if (fileExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        switch (InstallUpdateWindowsExeType)
+                        {
+                            case UpdatumWindowsExeType.Auto:
+                                isWindowsInstaller = Utilities.IsWindowsInstallerFile(filePath);
+                                break;
+                            case UpdatumWindowsExeType.Installer:
+                                isWindowsInstaller = true;
+                                break;
+                            case UpdatumWindowsExeType.SingleFileApp:
+                                break;
+                            default:
+                                throw new ArgumentOutOfRangeException(nameof(InstallUpdateWindowsExeType));
+                        }
                     }
 
-                    InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                    if (isWindowsInstaller)
+                    {
+                        //if (!OperatingSystem.IsWindows()) throw new NotSupportedException($"The file type ({fileExtension}) is only supported on Windows.");
 
-                    using var process = Process.Start(
-                        new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                        string upgradeScriptFilePath;
+                        using (var stream = CreateScriptFile(out upgradeScriptFilePath))
                         {
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            WorkingDirectory = tmpPath
-                        });
+                            WriteWindowsScriptHeader(stream);
+                            WriteWindowsScriptFileValidation(stream);
+                            WriteWindowsScriptKillInstances(stream);
+                            WriteWindowsScriptInjectCustomScript(stream);
 
-                    if (forceTerminate) Environment.Exit(0); // Exit the application to install
-                    return true;
+                            stream.WriteLine("echo - Calling the installer");
+                            stream.WriteLine($"start \"\" /WAIT \"%FILEPATH%\" {InstallUpdateWindowsInstallerArguments}");
+                            stream.WriteLine(" REM /WAIT - Start application and wait for it to terminate.");
+                            stream.WriteLine();
+
+                            stream.WriteLine("if /I \"%RUN_AFTER_UPGRADE%\"==\"True\" (");
+                            stream.WriteLine("  echo - Execute the upgraded application");
+                            stream.WriteLine($"  if exist \"%{nameof(EntryApplication.ExecutablePath)}%\" (");
+                            stream.WriteLine($"    start \"\" \"%{nameof(EntryApplication.ExecutablePath)}%\" %RUN_ARGUMENTS%");
+                            stream.WriteLine("  ) else (");
+                            stream.WriteLine($"    echo - File not found: \"%{nameof(EntryApplication.ExecutablePath)}%\", not executing!");
+                            stream.WriteLine("  )");
+                            stream.WriteLine(") else (");
+                            stream.WriteLine("  echo - Skip execution of application (RUN_AFTER_UPGRADE is not true)");
+                            stream.WriteLine(")");
+                            stream.WriteLine();
+
+
+                            WriteWindowsScriptEnd(stream);
+                        }
+
+                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+
+                        using var process = Process.Start(
+                            new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                            {
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                                WorkingDirectory = tmpPath
+                            });
+
+                        if (forceTerminate) Environment.Exit(0); // Exit the application to install
+                        return true;
+                    }
                 }
 
                 ////////////////////////////////

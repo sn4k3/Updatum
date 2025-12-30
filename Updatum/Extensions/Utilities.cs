@@ -11,7 +11,12 @@ namespace Updatum.Extensions;
 /// <summary>
 /// Provides utility methods and constants.
 /// </summary>
-internal static class Utilities
+#if DEBUG
+public
+#else
+internal
+#endif
+    static class Utilities
 {
     /// <summary>
     /// Gets the unix file mode for 775 permissions.

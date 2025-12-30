@@ -155,6 +155,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     private long _downloadedBytes;
     private UpdatumWindowsExeType _installUpdateWindowsExeType;
     private string? _installUpdateWindowsInstallerArguments;
+    private UpdatumSingleFileExecutableNameStrategy _installUpdateSingleFileExecutableNameStrategy;
     private string? _installUpdateSingleFileExecutableName;
     private string? _installUpdateInjectCustomScript;
     private UpdatumState _state;
@@ -407,6 +408,15 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     {
         get => _installUpdateWindowsInstallerArguments;
         set => RaiseAndSetIfChanged(ref _installUpdateWindowsInstallerArguments, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the strategy used to determine the executable file name when installing an update for single-file applications.
+    /// </summary>
+    public UpdatumSingleFileExecutableNameStrategy InstallUpdateSingleFileExecutableNameStrategy
+    {
+        get => _installUpdateSingleFileExecutableNameStrategy;
+        set => RaiseAndSetIfChanged(ref _installUpdateSingleFileExecutableNameStrategy, value);
     }
 
     /// <summary>
@@ -1052,22 +1062,71 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
         void WriteWindowsScriptEnd(StreamWriter stream)
         {
             stream.WriteLine("echo - Removing temp source files");
-            stream.WriteLine("if not \"%DOWNLOAD_FILEPATH%\"==\"\" if /I not \"%DOWNLOAD_FILEPATH%\"==\"\\\" if exist \"%DOWNLOAD_FILEPATH%\" del /F /Q \"%DOWNLOAD_FILEPATH%\"");
-            stream.WriteLine("if not \"%FILEPATH%\"==\"\" if /I not \"%FILEPATH%\"==\"\\\" if exist \"%FILEPATH%\" del /F /Q \"%FILEPATH%\"");
-            stream.WriteLine(" REM /F - Force deleting of read-only files.");
-            stream.WriteLine(" REM /Q - Quiet mode, do not ask if ok to delete on global wildcard.");
+            stream.WriteLine("call :DeleteIfSafe \"%DOWNLOAD_FILEPATH%\"");
+            stream.WriteLine("call :DeleteIfSafe \"%FILEPATH%\"");
             stream.WriteLine();
 
 
             stream.WriteLine($"if \"%{nameof(EntryApplication.AssemblyConfiguration)}%\"==\"Release\" (");
-            stream.WriteLine("  echo - Removing self");
-            stream.WriteLine("  start \"\" /b cmd /c \"timeout /t 1 >nul & del /f /q \"\"%~f0\"\"\"");
+            stream.WriteLine("  start \"\" /b cmd /c \"timeout /t 1 >nul & call :DeleteIfSafe \"\"%~f0\"\" \"\"- Removing self\"\"\"");
             stream.WriteLine(")");
             stream.WriteLine();
 
             stream.WriteLine("endlocal");
             stream.WriteLine("echo - Completed");
             stream.WriteLine("REM End of script");
+            stream.WriteLine();
+
+            stream.WriteLine("REM ----------------------------------------");
+            stream.WriteLine("REM Usage:");
+            stream.WriteLine("REM   call :DeleteIfSafe \"C:\\path\\to\\file.tmp\" \"Removing temp file\"");
+            stream.WriteLine("REM Returns:");
+            stream.WriteLine("REM   0 = deleted OR not found");
+            stream.WriteLine("REM   1 = unsafe path OR failed to delete");
+            stream.WriteLine("REM ----------------------------------------");
+            stream.WriteLine(":DeleteIfSafe");
+            stream.WriteLine("setlocal EnableExtensions");
+            stream.WriteLine("set \"FILE=%~1\"");
+            stream.WriteLine("set \"MSG=%~2\"");
+            stream.WriteLine();
+            stream.WriteLine("if defined MSG echo(%MSG%");
+            stream.WriteLine();
+            stream.WriteLine("REM Safety: empty");
+            stream.WriteLine("if not defined FILE (");
+            stream.WriteLine("  echo(  [SKIP] Empty path");
+            stream.WriteLine("  exit /b 1");
+            stream.WriteLine(")");
+            stream.WriteLine();
+            stream.WriteLine("REM Safety: \"\\\"");
+            stream.WriteLine("if \"%FILE%\"==\"\\\" (");
+            stream.WriteLine("  echo(  [SKIP] Unsafe path: \"\\\"");
+            stream.WriteLine("  exit /b 1");
+            stream.WriteLine(")");
+            stream.WriteLine();
+            stream.WriteLine("REM Safety: block drive root like C:\\, D:\\");
+            stream.WriteLine("if \"%FILE:~1,2%\"==\":\\\" if \"%FILE:~3%\"==\"\" (");
+            stream.WriteLine("  echo(  [SKIP] Unsafe path: drive root \"%FILE%\"");
+            stream.WriteLine("  exit /b 1");
+            stream.WriteLine(")");
+            stream.WriteLine();
+            stream.WriteLine("REM Not found = not an error (change to exit /b 1 if you prefer)");
+            stream.WriteLine("if not exist \"%FILE%\" (");
+            stream.WriteLine("  REM echo(  [SKIP] Not found \"%FILE%\"");
+            stream.WriteLine("  exit /b 0");
+            stream.WriteLine(")");
+            stream.WriteLine();
+            stream.WriteLine("del /F /Q \"%FILE%\" >nul 2>&1");
+            stream.WriteLine(" REM /F - Force deleting of read-only files.");
+            stream.WriteLine(" REM /Q - Quiet mode, do not ask if ok to delete on global wildcard.");
+            stream.WriteLine();
+            stream.WriteLine("if exist \"%FILE%\" (");
+            stream.WriteLine("  echo(  [FAIL] Could not delete \"%FILE%\"");
+            stream.WriteLine("  exit /b 1");
+            stream.WriteLine(")");
+            stream.WriteLine();
+            stream.WriteLine("echo(  [OK] Deleted \"%FILE%\"");
+            stream.WriteLine("exit /b 0");
+            stream.WriteLine("REM End of :DeleteIfSafe subroutine");
         }
 
         // ***********
@@ -1101,6 +1160,63 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             stream.WriteLine($"RUN_AFTER_UPGRADE={Utilities.BashAnsiCString(runArguments != NoRunAfterUpgradeToken)}");
             stream.WriteLine($"RUN_ARGUMENTS={Utilities.BashAnsiCString(runArguments)}");
             stream.WriteLine();
+
+            // Functions
+            stream.WriteLine("# ----------------------------------------");
+            stream.WriteLine("# Usage:");
+            stream.WriteLine("#   delete_if_safe \"/path/to/file.tmp\" \"Removing temp file\"");
+            stream.WriteLine("# Returns:");
+            stream.WriteLine("#   0 = deleted OR not found");
+            stream.WriteLine("#   1 = unsafe path OR failed to delete");
+            stream.WriteLine("# ----------------------------------------");
+            stream.WriteLine("delete_if_safe() {");
+            stream.WriteLine("  local FILE=\"${1-}\"");
+            stream.WriteLine("  local MSG=\"${2-}\"");
+            stream.WriteLine();
+            stream.WriteLine("  # Print message");
+            stream.WriteLine("  if [[ -n \"$MSG\" ]]; then");
+            stream.WriteLine("    echo \"$MSG\"");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  # Safety: empty");
+            stream.WriteLine("  if [[ -z \"$FILE\" ]]; then");
+            stream.WriteLine("    echo \"  [SKIP] Empty path\"");
+            stream.WriteLine("    return 1");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  # Safety: root");
+            stream.WriteLine("  if [[ \"$FILE\" == \"/\" ]]; then");
+            stream.WriteLine("    echo \"  [SKIP] Unsafe path: \\\"/\\\"\"");
+            stream.WriteLine("    return 1");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  # Safety: also block \".\" and \"..\" (optional but sensible)");
+            stream.WriteLine("  if [[ \"$FILE\" == \".\" || \"$FILE\" == \"..\" ]]; then");
+            stream.WriteLine("    echo \"  [SKIP] Unsafe path: \\\"$FILE\\\"\"");
+            stream.WriteLine("    return 1");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  # Not found = not an error");
+            stream.WriteLine("  if [[ ! -e \"$FILE\" ]]; then");
+            stream.WriteLine("    # echo \"  [SKIP] Not found \\\"$FILE\\\"\"");
+            stream.WriteLine("    return 0");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  # Delete (force, no prompt)");
+            stream.WriteLine("  rm -f -- \"$FILE\" 2>/dev/null");
+            stream.WriteLine();
+            stream.WriteLine("  # Verify");
+            stream.WriteLine("  if [[ -e \"$FILE\" ]]; then");
+            stream.WriteLine("    echo \"  [FAIL] Could not delete \\\"$FILE\\\"\"");
+            stream.WriteLine("    return 1");
+            stream.WriteLine("  fi");
+            stream.WriteLine();
+            stream.WriteLine("  echo \"  [OK] Deleted \\\"$FILE\\\"\"");
+            stream.WriteLine("  return 0");
+            stream.WriteLine("}");
+            stream.WriteLine("# End of delete_if_safe()");
+            stream.WriteLine();
+
         }
 
         void WriteLinuxScriptKillInstances(StreamWriter stream)
@@ -1165,14 +1281,15 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
         void WriteLinuxScriptEnd(StreamWriter stream)
         {
             stream.WriteLine("echo \"- Removing temp source files\"");
-            stream.WriteLine("[[ -n \"$DOWNLOAD_FILEPATH\" && \"$DOWNLOAD_FILEPATH\" != \"/\" && \"$DOWNLOAD_FILEPATH\" != \"\\\" && -e \"$DOWNLOAD_FILEPATH\" ]] && rm -f -- \"$DOWNLOAD_FILEPATH\"");
-            stream.WriteLine("[[ -n \"$FILEPATH\" && \"$FILEPATH\" != \"/\" && \"$FILEPATH\" != \"\\\" && -e \"$FILEPATH\" ]] && rm -f -- \"$FILEPATH\"");
+
+            stream.WriteLine("delete_if_safe \"$DOWNLOAD_FILEPATH\"");
+            stream.WriteLine("delete_if_safe \"$FILEPATH\"");
             stream.WriteLine();
 
             stream.WriteLine($"if [ \"${nameof(EntryApplication.AssemblyConfiguration)}\" = \"Release\" ]; then");
-            stream.WriteLine("  echo \"- Removing self\"");
-            stream.WriteLine("  rm -f -- \"$0\"");
+            stream.WriteLine("  delete_if_safe \"$0\" \"- Removing self\"");
             stream.WriteLine("fi");
+            stream.WriteLine();
 
 
             stream.WriteLine("echo \"- Completed\"");
@@ -1219,7 +1336,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                         {
                             targetDirectoryPath = Path.Combine(Utilities.CommonDefaultApplicationDirectory,
                                 !string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)
-                                    ? InstallUpdateSingleFileExecutableName
+                                    ? string.Format(InstallUpdateSingleFileExecutableName, newVersionStr)
                                     : EntryApplication.AssemblyName
                                       ?? Path.GetFileNameWithoutExtension(EntryApplication.ExecutableName)
                                       ?? fileNameNoExt);
@@ -1338,11 +1455,12 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
                             using var process = Process.Start(
-                                new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                                new ProcessStartInfo("cmd.exe")
                                 {
                                     UseShellExecute = false,
                                     CreateNoWindow = true,
-                                    WorkingDirectory = tmpPath
+                                    WorkingDirectory = tmpPath,
+                                    ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                                 });
                         }
                         else // Linux or macOS
@@ -1474,14 +1592,12 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                 stream.WriteLine("echo \"- Removing temp source files\"");
                                 stream.WriteLine("if [ -z \"${SOURCE_PATH}\" ] || [ \"${SOURCE_PATH}\" = \"/\" ]; then");
                                 stream.WriteLine("  echo \"- Error: Refusing to remove SOURCE_PATH='${SOURCE_PATH}'\"");
-                                stream.WriteLine("  exit 1");
+                                stream.WriteLine("else");
+                                stream.WriteLine("  rm -rf \"$SOURCE_PATH\"");
                                 stream.WriteLine("fi");
                                 stream.WriteLine("if [ -z \"${DEST_PATH}\" ] || [ \"${DEST_PATH}\" = \"/\" ]; then");
                                 stream.WriteLine("  echo \"- Error: Refusing to use DEST_PATH='${DEST_PATH}'\"");
-                                stream.WriteLine("  exit 1");
                                 stream.WriteLine("fi");
-                                stream.WriteLine();
-                                stream.WriteLine("rm -rf \"$SOURCE_PATH\"");
                                 stream.WriteLine();
 
                                 WriteLinuxScriptEnd(stream);
@@ -1493,13 +1609,13 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
                             // Execute the script
-                            using var process = Process.Start(
-                                new ProcessStartInfo("/bin/bash", $"\"{upgradeScriptFilePath}\"")
-                                {
-                                    UseShellExecute = false,
-                                    CreateNoWindow = true,
-                                    WorkingDirectory = tmpPath
-                                });
+                            using var process = Process.Start(new ProcessStartInfo("/usr/bin/env")
+                            {
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                                WorkingDirectory = tmpPath,
+                                ArgumentList = { "bash", upgradeScriptFilePath },
+                            });
                         }
 
                         if (forceTerminate) Environment.Exit(0);
@@ -1570,11 +1686,12 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                         InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
                         using var process = Process.Start(
-                            new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                            new ProcessStartInfo("cmd.exe")
                             {
                                 UseShellExecute = false,
                                 CreateNoWindow = true,
-                                WorkingDirectory = tmpPath
+                                WorkingDirectory = tmpPath,
+                                ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                             });
 
                         if (forceTerminate) Environment.Exit(0); // Exit the application to install
@@ -1651,19 +1768,52 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
 
                     // Infer from executing filename and use it if the first 3 characters are the same,
                     // assume it's the same base name and just change the version part
-                    if (!string.IsNullOrWhiteSpace(currentExecutablePath)
-                        && !string.IsNullOrWhiteSpace(currentExecutableFileName)
-                        && !string.IsNullOrWhiteSpace(targetFileName)
-                        && currentExecutableFileName.Length >= 3 && targetFileName.Length >= 3
-                        && currentExecutableFileName[0] == targetFileName[0]
-                        && currentExecutableFileName[1] == targetFileName[1]
-                        && currentExecutableFileName[2] == targetFileName[2])
+                    bool SetTargetNameFromCurrentExecutableName()
                     {
-                        targetFileName = Path.GetFileNameWithoutExtension(SanitizeFileNameWithVersion(currentExecutableFileName, newVersionStr));
+                        if (!string.IsNullOrWhiteSpace(currentExecutablePath)
+                            && !string.IsNullOrWhiteSpace(currentExecutableFileName)
+                            && !string.IsNullOrWhiteSpace(targetFileName)
+                            && currentExecutableFileName.Length >= 3 && targetFileName.Length >= 3
+                            && currentExecutableFileName[0] == targetFileName[0]
+                            && currentExecutableFileName[1] == targetFileName[1]
+                            && currentExecutableFileName[2] == targetFileName[2])
+                        {
+                            targetFileName =
+                                Path.GetFileNameWithoutExtension(
+                                    SanitizeFileNameWithVersion(currentExecutableFileName, newVersionStr));
+
+                            return true;
+                        }
+
+                        return false;
                     }
-                    else if (!string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName)) // Manual filename
+
+                    // Custom filename
+                    bool SetTargetNameWithCustomName()
                     {
-                        targetFileName = string.Format(InstallUpdateSingleFileExecutableName, newVersionStr);
+                        if (!string.IsNullOrWhiteSpace(InstallUpdateSingleFileExecutableName))
+                        {
+                            targetFileName = string.Format(InstallUpdateSingleFileExecutableName, newVersionStr);
+                            return true;
+                        }
+
+                        return false;
+                    }
+
+
+                    switch (InstallUpdateSingleFileExecutableNameStrategy)
+                    {
+                        case UpdatumSingleFileExecutableNameStrategy.EntryApplicationName:
+                            if (!SetTargetNameFromCurrentExecutableName()) SetTargetNameWithCustomName();
+                            break;
+                        case UpdatumSingleFileExecutableNameStrategy.CustomName:
+                            if (!SetTargetNameWithCustomName()) SetTargetNameFromCurrentExecutableName();
+                            break;
+                        case UpdatumSingleFileExecutableNameStrategy.DownloadName:
+                            // Default behavior, already filled as, do nothing
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException(nameof(InstallUpdateSingleFileExecutableNameStrategy));
                     }
 
                     var targetFilePath = Path.Combine(targetDirectoryPath, $"{targetFileName}{fileExtension}");
@@ -1722,6 +1872,9 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             WriteWindowsScriptKillInstances(stream);
                             WriteWindowsScriptInjectCustomScript(stream);
 
+                            stream.WriteLine($"call :DeleteIfSafe \"%{nameof(EntryApplication.ExecutablePath)}%\" \"- Removing old executable file\"");
+                            stream.WriteLine();
+
 
                             stream.WriteLine("echo - Moving the program file");
                             stream.WriteLine("move /Y \"%SOURCE_FILEPATH%\" \"%TARGET_FILEPATH%\"");
@@ -1746,11 +1899,12 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                         InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
                         using var process = Process.Start(
-                            new ProcessStartInfo("cmd.exe", $"/c \"{upgradeScriptFilePath}\"")
+                            new ProcessStartInfo("cmd.exe")
                             {
                                 UseShellExecute = false,
                                 CreateNoWindow = true,
-                                WorkingDirectory = tmpPath
+                                WorkingDirectory = tmpPath,
+                                ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                             });
 
 
@@ -1777,6 +1931,9 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
 
                             WriteLinuxScriptKillInstances(stream);
                             WriteLinuxScriptInjectCustomScript(stream);
+
+                            stream.WriteLine($"delete_if_safe \"${nameof(EntryApplication.ExecutablePath)}\" \"- Removing old executable file\"");
+                            stream.WriteLine();
 
                             stream.WriteLine("echo \"- Moving the program file\"");
                             stream.WriteLine("mkdir -p \"$(dirname \"$TARGET_FILEPATH\")\"");
@@ -1823,15 +1980,18 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             WriteLinuxScriptEnd(stream);
                         }
 
+                        // Make the script executable
+                        File.SetUnixFileMode(upgradeScriptFilePath, Utilities.Unix755FileMode);
+
                         InstallUpdateCompleted?.Invoke(this, downloadedAsset);
 
-                        using var process = Process.Start(
-                            new ProcessStartInfo("/bin/bash", $"\"{upgradeScriptFilePath}\"")
-                            {
-                                UseShellExecute = false,
-                                CreateNoWindow = true,
-                                WorkingDirectory = tmpPath
-                            });
+                        using var process = Process.Start(new ProcessStartInfo("/usr/bin/env")
+                        {
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            WorkingDirectory = tmpPath,
+                            ArgumentList = { "bash", upgradeScriptFilePath },
+                        });
 
                         if (forceTerminate) Environment.Exit(0); // Exit the application to install
 

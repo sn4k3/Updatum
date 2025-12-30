@@ -13,6 +13,7 @@ internal class Program
     // https://github.com/sn4k3/UVtools/releases
     internal static readonly UpdatumManager AppUpdater = new(RepositoryOwner, RepositoryName)
     {
+        // All below are optional settings with recommended defaults
         // Regex filter to get the correct asset from running system
         // Defaults would work here too: EntryApplication.GenericRuntimeIdentifier
         AssetRegexPattern = $"^{RepositoryName}_{EntryApplication.GenericRuntimeIdentifier}_v",
@@ -25,9 +26,12 @@ internal class Program
         // Displays a basic user interface for MSI package
         // This will show the installer UI installing without any interaction
         InstallUpdateWindowsInstallerArguments = "/qb",
+        // Strategy to determine the single file executable name for installation and update
+        InstallUpdateSingleFileExecutableNameStrategy = UpdatumSingleFileExecutableNameStrategy.EntryApplicationName,
         // Fallback name if unable to determine the executable name from the entry application
         // This is safe to omit, but as we are using a fake app, we need to set it
         InstallUpdateSingleFileExecutableName = RepositoryName,
+        // Enable codesign verification for macOS .app bundles
         InstallUpdateCodesignMacOSApp = true,
     };
 

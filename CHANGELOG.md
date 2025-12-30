@@ -1,5 +1,12 @@
+# v1.3.2 (30/12/2025)
+- Add `InstallUpdateSingleFileExecutableName` property to specify the name of the single file executable when installing updates for single file applications (#6)
+- Fix possible path bug when using `InstallUpdateSingleFileExecutableName` with `{0}` when required and trying to create base directory
+- Set and flag the auto updater script for single file applications on Linux as executable
+- Improve the upgrade script for deleting files, now using functions for better code reuse
+- Improve process start for the upgrade scripts
+
 # v1.3.1 (29/12/2025)
-- Add `InstallUpdateWindowsExeType` property to strict indicate the type of .exe (Auto, Installer, SingleFileApp)
+- Add `InstallUpdateWindowsExeType` property to strict indicate the type of .exe (Auto, Installer, SingleFileApp) (#6)
 - Only remove the self upgrade script on Release builds
 - Fix unable to remove the self upgrade script under windows
 - Fix and encode the raw strings of setup signatures to not show under single-file apps

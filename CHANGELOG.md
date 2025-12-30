@@ -1,6 +1,7 @@
 # v1.3.2 (30/12/2025)
 - Add `InstallUpdateSingleFileExecutableNameStrategy` property to define how to name the single file executable when installing updates (#6)
 - Fix possible path bug when using `InstallUpdateSingleFileExecutableName` with `{0}` when required and trying to create base directory
+- Remove the current single-file application before moving the new file into place
 - Set and flag the auto updater script for single file applications on Linux as executable
 - Improve the upgrade script for deleting files, now using functions for better code reuse
 - Improve process start for the upgrade scripts

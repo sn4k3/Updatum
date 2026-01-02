@@ -144,6 +144,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     private bool _disposed;
     private System.Timers.Timer? _autoUpdateCheckTimer;
     private bool _fetchOnlyLatestRelease;
+    private bool _allowPreReleases;
     private DateTime _lastCheckDateTime = DateTime.MinValue;
     private IReadOnlyList<Release> _releases = [];
     private IReadOnlyList<Release> _releasesAhead = [];
@@ -222,6 +223,16 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether pre-release versions are allowed.<br />
+    /// Example: v1.0.0-alpha, v1.0.0-beta, v1.0.0-rc1
+    /// </summary>
+    public bool AllowPreReleases
+    {
+        get => _allowPreReleases;
+        set => RaiseAndSetIfChanged(ref _allowPreReleases, value);
+    }
+
+    /// <summary>
     /// Gets the last time the repository was checked for updates.
     /// </summary>
     public DateTime LastCheckDateTime
@@ -267,7 +278,6 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     /// </summary>
     [MemberNotNullWhen(true, nameof(LatestRelease), nameof(LatestReleaseTagVersionStr))]
     public bool IsUpdateAvailable => ReleasesAheadCount > 0;
-
 
     /// <summary>
     /// Gets the latest release for the repository.
@@ -601,7 +611,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                 if (release.Draft // Skip draft releases
                     || release.PublishedAt is null // Skip not published releases
                     || release.Assets.Count == 0 // Skip releases without assets
-                    || !char.IsAsciiDigit(release.TagName[^1])) // Skip tag names that don't end with a digit (eg: v1.0.0-alpha)
+                    || (!AllowPreReleases && release.Prerelease)) // Skip pre-releases if not allowed
                     continue;
 
                 var tagVersion = release.GetTagVersion();

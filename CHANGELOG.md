@@ -1,3 +1,6 @@
+# v1.3.3 (02/01/2025)
+- Add `AllowPreReleases` property to allow updating to pre-release versions
+
 # v1.3.2 (30/12/2025)
 - Add `InstallUpdateSingleFileExecutableNameStrategy` property to define how to name the single file executable when installing updates (#6)
 - Fix possible path bug when using `InstallUpdateSingleFileExecutableName` with `{0}` when required and trying to create base directory

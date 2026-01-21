@@ -556,15 +556,16 @@ public static class EntryApplication
 
     /// <summary>
     /// Gets the base directory of the entry executable of the running application.<br/>
-    /// This is the directory where the entry executable is located.
+    /// This is the directory where the entry executable is located and not the app executable itself (eg. macOS bundle or AppImage directory).
     /// </summary>
+    /// <remarks>Use <see cref="AppContextBaseDirectory"/> instead for executable directory.</remarks>
     public static string? BaseDirectory => ExecutableInfoLazy.Value.BaseDirectory;
 
     /// <summary>
     /// Gets the full path to the entry executable of the running application.
     /// </summary>
     /// <remarks>Note the executable is from entry point and not the app executable itself.<br/>
-    /// It's expected to be different from <see cref="Environment.ProcessPath"/> in some cases.<br/>
+    /// It's expected to be different from <see cref="Environment.ProcessPath"/> and <see cref="ProcessPath"/> in some cases.<br/>
     /// Example: The MyApp.AppImage, MyApp.app will be returned instead of the app executable.<br/>
     /// If running from dotnet, it will return the AssemblyLocation, eg: myapp.dll.</remarks>
     public static string? ExecutablePath => ExecutableInfoLazy.Value.ExecutablePath;
@@ -580,8 +581,21 @@ public static class EntryApplication
     /// <remarks>When this property is <see langword="true"/>, the <see cref="ExecutablePath"/>, <see
     /// cref="ExecutableName"/>, and <see cref="BaseDirectory"/> properties are guaranteed to be non-null. If <see
     /// langword="false"/>, these properties may not be available.</remarks>
-    [MemberNotNullWhen(true, nameof(ExecutablePath), nameof(ExecutableName), nameof(BaseDirectory))]
+    [MemberNotNullWhen(true, nameof(ExecutablePath), nameof(ExecutableName), nameof(BaseDirectory), nameof(ProcessPath))]
     public static bool IsExecutablePathKnown => ExecutableInfoLazy.Value.IsExecutablePathKnown;
+
+    /// <summary>
+    /// Gets the base directory that the assembly resolver uses to probe for assemblies.
+    /// </summary>
+    /// <remarks>This property returns the value of <see cref="AppContext.BaseDirectory"/>, which typically
+    /// corresponds to the application's root directory. The returned path may vary depending on the application's
+    /// deployment model and hosting environment.</remarks>
+    public static string AppContextBaseDirectory => AppContext.BaseDirectory;
+
+    /// <summary>
+    /// Gets the full path to the executable file of the current process.
+    /// </summary>
+    public static string? ProcessPath => Environment.ProcessPath;
 
     /// <summary>
     /// Gets a formatted string containing the names and versions of all assemblies currently loaded in the application domain.

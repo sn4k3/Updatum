@@ -1,3 +1,8 @@
+# v1.3.4 (02/01/2025)
+- Add `EventSynchronizationContext` property to allow configuring the synchronization context where events are raised (Default to: `SynchronizationContext.Current`)
+- Add `AppContextBaseDirectory` property as a wrapper for `AppContext.BaseDirectory`
+- Add `ProcessPath` property as a wrapper for `Environment.ProcessPath`
+
 # v1.3.3 (02/01/2025)
 - Add `AllowPreReleases` property to allow updating to pre-release versions
 

@@ -141,6 +141,9 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     #endregion
 
     #region Members
+
+    // Capture the current synchronization context (e.g., UI thread context)
+    private SynchronizationContext? _eventSynchronizationContext = SynchronizationContext.Current;
     private bool _disposed;
     private System.Timers.Timer? _autoUpdateCheckTimer;
     private bool _fetchOnlyLatestRelease;
@@ -165,6 +168,32 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     #endregion
 
     #region Properties
+    /// <summary>
+    /// Gets or sets the <see cref="SynchronizationContext"/> used to dispatch events.<br/>
+    /// When set to a non-null value, events such as <see cref="CheckForUpdateCompleted"/>, <see cref="UpdateFound"/>,
+    /// <see cref="DownloadCompleted"/>, and <see cref="InstallUpdateCompleted"/> will be raised on the specified context.<br/>
+    /// This is useful for UI applications where events need to be handled on the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// By default, the context is captured from <see cref="SynchronizationContext.Current"/> at construction time.<br/>
+    /// Set to <c>null</c> to disable context dispatching and raise events on the calling thread.<br/>
+    /// For UI applications, typically set this to <c>SynchronizationContext.Current</c> from the UI thread,
+    /// or for Avalonia use <c>AvaloniaSynchronizationContext.Current</c>.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Capture UI context when creating the manager on the UI thread
+    /// var manager = new UpdatumManager(...);
+    /// // Context is captured automatically, or set explicitly:
+    /// manager.EventSynchronizationContext = SynchronizationContext.Current;
+    /// </code>
+    /// </example>
+    public SynchronizationContext? EventSynchronizationContext
+    {
+        get => _eventSynchronizationContext;
+        set => _eventSynchronizationContext = value;
+    }
+
     /// <summary>
     /// Gets the GitHub client used to access the GitHub API.
     /// </summary>
@@ -477,6 +506,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     /// Gets if the updater is busy doing any check or operation.
     /// </summary>
     public bool IsBusy => State != UpdatumState.None;
+
     #endregion
 
     #region Constructor
@@ -627,8 +657,8 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             ReleasesAhead = releasesAheadList;
             State = UpdatumState.None;
 
-            CheckForUpdateCompleted?.Invoke(this, EventArgs.Empty);
-            if (IsUpdateAvailable) UpdateFound?.Invoke(this, EventArgs.Empty);
+            RaiseEvent(CheckForUpdateCompleted);
+            if (IsUpdateAvailable) RaiseEvent(UpdateFound);
         }
         finally
         {
@@ -850,7 +880,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             State = UpdatumState.None;
             var download = new UpdatumDownloadedAsset(release, asset, targetPath);
 
-            DownloadCompleted?.Invoke(this, download);
+            RaiseEvent(DownloadCompleted, download);
 
             return download;
         }
@@ -1906,7 +1936,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             WriteWindowsScriptEnd(stream);
                         }
 
-                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                        RaiseEvent(InstallUpdateCompleted, downloadedAsset);
 
                         using var process = Process.Start(
                             new ProcessStartInfo("cmd.exe")
@@ -1993,7 +2023,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                         // Make the script executable
                         File.SetUnixFileMode(upgradeScriptFilePath, Utilities.Unix755FileMode);
 
-                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                        RaiseEvent(InstallUpdateCompleted, downloadedAsset);
 
                         using var process = Process.Start(new ProcessStartInfo("/usr/bin/env")
                         {
@@ -2027,7 +2057,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     public void ForceTriggerUpdateFromRelease(Release release)
     {
         ReleasesAhead = [release];
-        UpdateFound?.Invoke(this, EventArgs.Empty);
+        RaiseEvent(UpdateFound);
     }
 
     /// <summary>
@@ -2131,6 +2161,44 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
         var e = new PropertyChangedEventArgs(propertyName);
         OnPropertyChanged(e);
         _propertyChanged?.Invoke(this, e);
+    }
+
+    /// <summary>
+    /// Raises an event on the <see cref="EventSynchronizationContext"/> if set, otherwise on the current thread.
+    /// </summary>
+    /// <param name="handler">The event handler to invoke.</param>
+    private void RaiseEvent(EventHandler? handler)
+    {
+        if (handler is null) return;
+
+        if (_eventSynchronizationContext is not null)
+        {
+            _eventSynchronizationContext.Post(_ => handler(this, EventArgs.Empty), null);
+        }
+        else
+        {
+            handler(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Raises an event with arguments on the <see cref="EventSynchronizationContext"/> if set, otherwise on the current thread.
+    /// </summary>
+    /// <typeparam name="T">The type of the event arguments.</typeparam>
+    /// <param name="handler">The event handler to invoke.</param>
+    /// <param name="args">The event arguments.</param>
+    private void RaiseEvent<T>(EventHandler<T>? handler, T args)
+    {
+        if (handler is null) return;
+
+        if (_eventSynchronizationContext is not null)
+        {
+            _eventSynchronizationContext.Post(_ => handler(this, args), null);
+        }
+        else
+        {
+            handler(this, args);
+        }
     }
 
     #endregion

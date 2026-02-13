@@ -33,7 +33,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     private PropertyChangedEventHandler? _propertyChanged;
 
     /// <summary>
-    /// /// Occurs when a property changes.
+    /// Occurs when a property changes.
     /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged
     {
@@ -983,7 +983,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     /// <exception cref="FileNotFoundException">Thrown if the file specified by downloadedAsset does not exist.</exception>
     /// <exception cref="NotSupportedException">Thrown if the update file type is not supported on the current operating system.</exception>
     /// <exception cref="IOException">Thrown if an error occurs during installation, such as a failure to install a Flatpak package.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    /// <exception cref="InvalidOperationException">Thrown when an unexpected value is encountered for a configuration property.</exception>
     public Task<bool> InstallUpdateAsync(UpdatumDownloadedAsset downloadedAsset, bool forceTerminate = true, string? runArguments = null)
     {
         if (!downloadedAsset.FileExists) throw new FileNotFoundException("File not found", downloadedAsset.FilePath);
@@ -1518,7 +1518,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                 WriteWindowsScriptEnd(stream);
                             }
 
-                            InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                            RaiseEvent(InstallUpdateCompleted, downloadedAsset);
 
                             using var process = Process.Start(
                                 new ProcessStartInfo("cmd.exe")
@@ -1672,7 +1672,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             // Make the script executable
                             File.SetUnixFileMode(upgradeScriptFilePath, Utilities.Unix755FileMode);
 
-                            InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                            RaiseEvent(InstallUpdateCompleted, downloadedAsset);
 
                             // Execute the script
                             using var process = Process.Start(new ProcessStartInfo("/usr/bin/env")
@@ -1749,7 +1749,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             WriteWindowsScriptEnd(stream);
                         }
 
-                        InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                        RaiseEvent(InstallUpdateCompleted, downloadedAsset);
 
                         using var process = Process.Start(
                             new ProcessStartInfo("cmd.exe")
@@ -1785,7 +1785,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                         flatpakName = Path.GetFileNameWithoutExtension(EntryApplication.LinuxFlatpakPath);
                     }
 
-                    InstallUpdateCompleted?.Invoke(this, downloadedAsset);
+                    RaiseEvent(InstallUpdateCompleted, downloadedAsset);
                     Utilities.StartProcess("/usr/bin/flatpak", $"run {flatpakName}");
 
                     // Exit the application

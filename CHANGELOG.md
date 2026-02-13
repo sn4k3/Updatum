@@ -1,3 +1,6 @@
+# v1.3.5 (13/02/2025)
+- Fix downloading from private repo is not possible #7
+
 # v1.3.4 (21/01/2025)
 - Add `EventSynchronizationContext` property to allow configuring the synchronization context where events are raised (Default to: `SynchronizationContext.Current`)
 - Add `AppContextBaseDirectory` property as a wrapper for `AppContext.BaseDirectory`

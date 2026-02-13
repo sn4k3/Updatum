@@ -840,7 +840,33 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
 
         try
         {
-            using var response = await HttpClient.GetAsync(asset.BrowserDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, asset.BrowserDownloadUrl);
+
+            // If we have credentials, we must use the API URL to download the asset,
+            // as BrowserDownloadUrl does not support authentication for private repositories data.
+            if (GithubClient.Credentials.AuthenticationType != AuthenticationType.Anonymous)
+            {
+                request.RequestUri = new Uri(asset.Url);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
+
+                switch (GithubClient.Credentials.AuthenticationType)
+                {
+                    case AuthenticationType.Basic:
+                        var header = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{GithubClient.Credentials.Login}:{GithubClient.Credentials.Password}"));
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", header);
+                        break;
+                    case AuthenticationType.Oauth:
+                    case AuthenticationType.Bearer:
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", GithubClient.Credentials.GetToken());
+                        break;
+                    case AuthenticationType.Anonymous:
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unexpected value for {nameof(GithubClient.Credentials.AuthenticationType)}: {GithubClient.Credentials.AuthenticationType}");
+                }
+            }
+
+            using var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var totalBytes = response.Content.Headers.ContentLength ?? asset.Size;
@@ -1686,7 +1712,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             case UpdatumWindowsExeType.SingleFileApp:
                                 break;
                             default:
-                                throw new ArgumentOutOfRangeException(nameof(InstallUpdateWindowsExeType));
+                                throw new InvalidOperationException($"Unexpected value for {nameof(InstallUpdateWindowsExeType)}: {InstallUpdateWindowsExeType}");
                         }
                     }
 
@@ -1853,7 +1879,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             // Default behavior, already filled as, do nothing
                             break;
                         default:
-                            throw new ArgumentOutOfRangeException(nameof(InstallUpdateSingleFileExecutableNameStrategy));
+                            throw new InvalidOperationException($"Unexpected value for {nameof(InstallUpdateSingleFileExecutableNameStrategy)}: {InstallUpdateSingleFileExecutableNameStrategy}");
                     }
 
                     var targetFilePath = Path.Combine(targetDirectoryPath, $"{targetFileName}{fileExtension}");

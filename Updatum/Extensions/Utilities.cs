@@ -84,7 +84,7 @@ internal
             if (process is null) return -1;
             if (waitForCompletion)
             {
-                process.WaitForExit(waitTimeout);
+                if (!process.WaitForExit(waitTimeout)) return -1;
                 return process.ExitCode;
             }
             return 0;
@@ -107,8 +107,8 @@ internal
         var tmpDir = Path.Combine(Path.GetTempPath(), name);
 
         // Delete if it was a file
-        if (File.Exists(name))
-            File.Delete(name);
+        if (File.Exists(tmpDir))
+            File.Delete(tmpDir);
 
         if (init)
         {
@@ -264,7 +264,7 @@ internal
             decoded[i] = (char)(encodedSignature[i] ^ ObfuscationKey);
         }
 
-        return data.IndexOf(decoded) >= 0;
+        return data.IndexOf(decoded, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     /// <summary>

@@ -1,12 +1,16 @@
-# v1.3.5 (13/02/2025)
+# v1.3.6 (06/04/2026)
+- Fix the auto upgrading script killing itself preventing the auto upgrade to complete on Linux and macOS
+- Fix GetTemporaryFolder checks `name` instead of `tmpDir` for file existence
+
+# v1.3.5 (13/02/2026)
 - Fix downloading from private repo is not possible #7
 
-# v1.3.4 (21/01/2025)
+# v1.3.4 (21/01/2026)
 - Add `EventSynchronizationContext` property to allow configuring the synchronization context where events are raised (Default to: `SynchronizationContext.Current`)
 - Add `AppContextBaseDirectory` property as a wrapper for `AppContext.BaseDirectory`
 - Add `ProcessPath` property as a wrapper for `Environment.ProcessPath`
 
-# v1.3.3 (02/01/2025)
+# v1.3.3 (02/01/2026)
 - Add `AllowPreReleases` property to allow updating to pre-release versions
 
 # v1.3.2 (30/12/2025)

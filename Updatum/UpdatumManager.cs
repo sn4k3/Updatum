@@ -590,7 +590,11 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     {
         try
         {
-            _ = CheckForUpdatesAsync();
+            _ = CheckForUpdatesAsync().ContinueWith(t =>
+                {
+                    Debug.WriteLine(t.Exception);
+                },
+                TaskContinuationOptions.OnlyOnFaulted);
         }
         catch (Exception ex)
         {
@@ -1296,7 +1300,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             }
             else if (!string.IsNullOrWhiteSpace(EntryApplication.ProcessName))
             {
-                killCommands.Add($"-f \"${nameof(EntryApplication.ProcessName)}\"");
+                killCommands.Add($"-x \"${nameof(EntryApplication.ProcessName)}\"");
             }
 
             if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyName))

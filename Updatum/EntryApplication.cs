@@ -412,7 +412,7 @@ public static class EntryApplication
     public static string? AssemblyCopyright => AssemblyCopyrightLazy.Value;
 
     /// <summary>
-    /// Gets the copyright information of the entry assembly, as specified by the <see cref="AssemblyCopyrightAttribute"/>.
+    /// Gets the company name of the entry assembly, as specified by the <see cref="AssemblyCompanyAttribute"/>.
     /// </summary>
     public static string? AssemblyCompany => AssemblyCompanyLazy.Value;
 

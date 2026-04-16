@@ -182,18 +182,16 @@ public static class EntryApplication
     /// <summary>
     /// Lazily retrieves the version string of the entry assembly, excluding any build metadata if present.
     /// </summary>
-    /// <remarks>The version string is determined by checking the entry assembly's AssemblyVersionAttribute,
-    /// then AssemblyInformationalVersion, and finally AssemblyVersion. If the version string contains build metadata
-    /// (indicated by a '+' character), only the portion before the '+' is returned. Returns null if no version
-    /// information is available.</remarks>
+    /// <remarks>The version string is determined by checking AssemblyInformationalVersion first, then
+    /// AssemblyVersion. If the version string contains build metadata (indicated by a '+' character), only the
+    /// portion before the '+' is returned. Returns null if no version information is available.</remarks>
     private static readonly Lazy<string?> AssemblyVersionStringLazy = new(() =>
     {
-        var version = EntryAssembly?.GetCustomAttribute<AssemblyVersionAttribute>()?.Version
-                      ?? AssemblyInformationalVersion
+        var version = AssemblyInformationalVersion
                       ?? AssemblyVersion?.ToString();
         if (version is null) return null;
         var indexOf = version.IndexOf('+');
-        return indexOf <= 0 ? version : version[..indexOf];
+        return indexOf < 0 ? version : version[..indexOf];
     });
 
     /// <summary>
@@ -259,7 +257,12 @@ public static class EntryApplication
     /// executable naming conventions.</remarks>
     private static readonly Lazy<string> ProcessNameLazy = new(() =>
     {
-        var processName = Path.GetFileName(Environment.ProcessPath) ?? Process.GetCurrentProcess().ProcessName;
+        var processName = Path.GetFileName(Environment.ProcessPath);
+        if (processName is null)
+        {
+            using var currentProcess = Process.GetCurrentProcess();
+            processName = currentProcess.ProcessName;
+        }
         if (!string.IsNullOrWhiteSpace(processName) && OperatingSystem.IsWindows() && !processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
             processName += ".exe";
@@ -609,10 +612,12 @@ public static class EntryApplication
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             var assembliesLengthPad = assemblies.Length.ToString().Length;
             var sb = new StringBuilder(assemblies.Length * 48);
+            var format = $"{{0:D{assembliesLengthPad}}}: {{1}}, Version={{2}}";
             for (var i = 0; i < assemblies.Length; i++)
             {
                 var assembly = assemblies[i].GetName();
-                sb.AppendLine(string.Format($"{{0:D{assembliesLengthPad}}}: {{1}}, Version={{2}}", i + 1, assembly.Name, assembly.Version));
+                sb.AppendFormat(format, i + 1, assembly.Name, assembly.Version);
+                sb.AppendLine();
             }
             return sb.ToString().TrimEnd();
         }
@@ -741,7 +746,8 @@ public static class EntryApplication
             int exitCode;
             if (IsRunningFromDotNetProcess)
             {
-                exitCode = Utilities.StartProcess(Environment.ProcessPath ?? ProcessName, $"\"{ExecutablePath}\" {runArguments}");
+                var args = runArguments is null ? $"\"{ExecutablePath}\"" : $"\"{ExecutablePath}\" {runArguments}";
+                exitCode = Utilities.StartProcess(Environment.ProcessPath ?? ProcessName, args);
             }
             else
             {

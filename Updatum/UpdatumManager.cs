@@ -762,7 +762,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
         foreach (var asset in release.Assets)
         {
             if (!AssetRegex.IsMatch(asset.Name)) continue;
-            if (!string.IsNullOrWhiteSpace(AssetExtensionFilter) && !asset.Name.EndsWith(AssetExtensionFilter)) continue;
+            if (!string.IsNullOrWhiteSpace(AssetExtensionFilter) && !asset.Name.EndsWith(AssetExtensionFilter, StringComparison.OrdinalIgnoreCase)) continue;
             candidateAssets.Add(asset);
         }
 
@@ -799,7 +799,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
 
             if (!string.IsNullOrWhiteSpace(extension))
             {
-                return candidateAssets.FirstOrDefault(asset => asset.Name.EndsWith(extension), candidateAssets[0]);
+                return candidateAssets.FirstOrDefault(asset => asset.Name.EndsWith(extension, StringComparison.OrdinalIgnoreCase), candidateAssets[0]);
             }
         }
 

@@ -1,3 +1,9 @@
+# v1.3.7 (16/04/2026)
+- Remove always null first condition on `AssemblyVersionStringLazy` 
+- Fix the leak on `ProcessNameLazy` by disposing the `Process` instance after getting the name
+- Improve the `FormattedLoadedAssemblies` formatting
+- Add `StringComparison.OrdinalIgnoreCase` with comparing asset extension
+
 # v1.3.6 (06/04/2026)
 - Fix the auto upgrading script killing itself preventing the auto upgrade to complete on Linux and macOS
 - Fix GetTemporaryFolder checks `name` instead of `tmpDir` for file existence

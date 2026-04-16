@@ -12,8 +12,8 @@ internal static class GitHubExtensions
     /// <returns></returns>
     public static string GetTagVersionStr(this Release release)
     {
-        return release.TagName[0] is 'v' or 'V'
-            ? release.TagName[1..]
+        return release.TagName is { Length: > 0 } tag && tag[0] is 'v' or 'V'
+            ? tag[1..]
             : release.TagName;
     }
 

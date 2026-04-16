@@ -104,6 +104,7 @@ internal
     /// <returns>The path to the temporary folder.</returns>
     public static string GetTemporaryFolder(string name, bool init = false)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var tmpDir = Path.Combine(Path.GetTempPath(), name);
 
         // Delete if it was a file

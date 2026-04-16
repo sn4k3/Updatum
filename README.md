@@ -12,30 +12,30 @@ Whether you're building a desktop tool or a larger application, Updatum helps yo
 
 ## Features
 
-- **💻 Cross-Platform:** Works on Windows, Linux, and MacOS.
+- **💻 Cross-Platform:** Works on Windows, Linux, and macOS.
 - **⚙️ Flexible Integration:** Easily embed into your WPF, WinForms, or console applications.
 - **🔍 Update Checker:** Manually and/or automatically checks GitHub for the latest release version.
 - **📦 Asset Management:** Automatically fetches the latest release assets based on your platform and architecture.
 - **📄 Changelog Support:** Retrieve release notes directly from GitHub Releases.
 - **⬇️ Download with Progress Tracking:** Download and track progress handler.
 - **🔄 Auto-Upgrade Support:** Automatically upgrades your application to a new release.
-- **📦 No External Dependencies:** Minimal overhead and no need for complex update infrastructure.
+- **📦 Minimal Dependencies:** Minimal overhead and no need for complex update infrastructure.
 
 ## Installation
 
-## NuGet:
+### NuGet:
 
 ```
 PM> Install-Package Updatum
 ```
 
-## .NET CLI:
+### .NET CLI:
 
 ```
 dotnet add package Updatum
 ```
 
-## Package reference directly to your `.csproj` file:
+### Package reference directly to your `.csproj` file:
 
 ```xml
 <PackageReference Include="Updatum" Version="*" />
@@ -68,6 +68,7 @@ If automatic, Updatum will:
 - .NET single-file publishes
 - Windows Installer (exe and msi)
 - Linux [AppImage](https://appimage.org/)
+- Linux [Flatpak](https://flatpak.org/)
 - macOS app bundle
 
 ## Example
@@ -325,7 +326,7 @@ public static async Task Main(string[] args)
 Your asset naming convention may differ from the default one, and you can customize the asset fetcher to suit your needs.  
 By using the property `AssetRegexPattern` you can provide a regex pattern to match your assets.
 
-```cssharp
+```csharp
 // Expect assets to be named like: MyApp_winx64_v1.0.0
 AppUpdater.AssetRegexPattern = $"{RuntimeInformation.RuntimeIdentifier.Replace("-", string.Empty)}";
 ```
@@ -345,13 +346,13 @@ You will require some sort of file included in the application folder to know if
 If you omit this step, the first asset will be used.
 
 
-```cssharp
+```csharp
 if (IsPortableApp) AppUpdater.AssetExtensionFilter = "zip";
 ```
 
 **Notes:** 
 
-- The `AssetRegexPattern` can also be used for the same porpose, but it is not recommended.
+- The `AssetRegexPattern` can also be used for the same purpose, but it is not recommended.
 </details>
 
 
@@ -363,7 +364,7 @@ if (IsPortableApp) AppUpdater.AssetExtensionFilter = "zip";
 
 If you using a binding framework like WPF, WinUI or Avalonia, you can use the properties directly:
 - `DownloadedMegabytes` to bind to a progress bar text
-- `DownloadTotalSizeMegabytes` to bind to a progress bar text
+- `DownloadSizeMegabytes` to bind to a progress bar text
 - `DownloadedPercentage` to bind to a progress bar
 - Example: {0} / {1} Megabytes
 
@@ -375,7 +376,7 @@ private static void AppUpdaterOnPropertyChanged(object? sender, PropertyChangedE
 {
     if (e.PropertyName == nameof(UpdatumManager.DownloadedPercentage))
     {
-        Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadTotalSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
+        Console.WriteLine($"Downloaded: {AppUpdater.DownloadedMegabytes} MB / {AppUpdater.DownloadSizeMegabytes} MB  ({AppUpdater.DownloadedPercentage} %)");
     }
 }
 ```
@@ -403,7 +404,7 @@ AppUpdater.AutoUpdateCheckTimer.Start();
 
 ### Force trigger an update
 
-You can force trigger an update check and event with by passing a specific version to compare with the latest release.  
+You can force trigger an update check and event by passing a specific version to compare with the latest release.  
 The easiest way is to pass a empty version `0.0.0.0` to always trigger the update found event.
 
 ```csharp
@@ -448,3 +449,9 @@ internal static readonly UpdatumManager AppUpdater = new(RepositoryOwner, Reposi
 };
 ```
 </details>
+
+## Contributing
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for code guidelines, build instructions, and how to submit a pull request.
+
+## License
+Updatum is licensed under the [MIT License](LICENSE).

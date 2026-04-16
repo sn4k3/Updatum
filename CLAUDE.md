@@ -21,13 +21,13 @@ dotnet pack Updatum --configuration Release --output .  # Pack NuGet package
 dotnet run --project Updatum.FakeApp                    # Run example app
 ```
 
-Requires .NET SDK 8.0+. Multi-targets net8.0/net9.0/net10.0. CI uses .NET 10.0.
+Requires .NET SDK 8.0+. Multi-targets net8.0/net9.0/net10.0. CI uses .NET 10.0. Solution file is `Updatum.slnx` (XML-based `.slnx` format, not classic `.sln`).
 
 ## Architecture
 
-### `UpdatumManager` (core class, ~2300 lines)
+### `UpdatumManager` (core class, ~2260 lines)
 
-The entire library logic lives in `Updatum/UpdatumManager.cs`. It implements `INotifyPropertyChanged` and `IDisposable`.
+The entire library logic lives in `Updatum/UpdatumManager.cs`. It is a `partial class` implementing `INotifyPropertyChanged` and `IDisposable`. The `partial` is used for `[GeneratedRegex]` source-generated regex members.
 
 **Lifecycle:** CheckForUpdatesAsync() -> GetChangelog() -> DownloadUpdateAsync() -> InstallUpdateAsync()
 
@@ -38,25 +38,41 @@ The entire library logic lives in `Updatum/UpdatumManager.cs`. It implements `IN
 
 Uses a static `HttpClient` for downloads. Supports `SynchronizationContext` dispatching for UI thread events via `EventSynchronizationContext`.
 
+**Events:** `CheckForUpdateCompleted`, `UpdateFound`, `DownloadCompleted`, `InstallUpdateCompleted`.
+
 ### `EntryApplication` (static utility, ~760 lines)
 
-`Updatum/EntryApplication.cs` — lazily cached properties for the running application: assembly info, paths, OS detection, runtime identifiers, bundle type detection (AppImage, Flatpak, macOS bundle, .NET single-file).
+`Updatum/EntryApplication.cs` — lazily cached properties (`Lazy<T>`) for the running application: assembly info, paths, OS detection, runtime identifiers, bundle type detection (AppImage, Flatpak, macOS bundle, .NET single-file).
 
-### `Utilities` (internal helpers)
+### Supporting types
 
-`Updatum/Extensions/Utilities.cs` — installer signature detection (XOR-obfuscated), script generation helpers (`BatchSetValue()`, `BashAnsiCString()`), process launch utilities. Public under `#if DEBUG` for testability.
+- `UpdatumDownloadedAsset.cs` — `record` wrapping Release, ReleaseAsset, and FilePath for a completed download.
+- `UpdatumEnums.cs` — `UpdatumState`, `UpdatumWindowsExeType`, `UpdatumSingleFileExecutableNameStrategy`.
+- `ApplicationBundleType.cs` — enum for bundle detection (Unknown, None, DotNetSingleFile, LinuxAppImage, LinuxFlatpak, MacOSAppBundle).
+- `Extensions/Utilities.cs` — installer signature detection (XOR-obfuscated), script generation helpers (`BatchSetValue()`, `BashAnsiCString()`), process launch utilities. Public under `#if DEBUG` for testability.
+- `Extensions/GitHubExtensions.cs` — internal Octokit `Release` extension methods (tag version parsing).
+- `Extensions/ArchiveExtensions.cs` — internal `ZipArchiveEntry` helpers.
+
+### Dependencies
+
+Intentionally lightweight — only two NuGet packages:
+- `Octokit` — GitHub API client
+- `Microsoft.SourceLink.GitHub` — Source Link (build-time only)
+
+Assembly is strong-named via `Updatum.snk`.
 
 ## Coding Conventions
 
 - **C# latest** with nullable reference types enabled.
 - **File-scoped namespaces** (`namespace Updatum;`).
-- **XML doc comments** (`///`) on all public members — the library generates documentation files.
+- **XML doc comments** (`///`) on all public members — the library generates documentation files (`GenerateDocumentationFile`).
 - **`ConfigureAwait(false)`** on every `await` inside the library.
 - **`INotifyPropertyChanged`** pattern with `RaiseAndSetIfChanged(ref field, value)` for all bindable properties.
 - **`#region` blocks** to organize code sections (Events, Constants, Properties, Constructor, Methods).
 - **Naming:** Properties/Methods/Constants: `PascalCase`. Private fields: `_camelCase`.
 - **Exceptions:** `ArgumentException`/`ArgumentNullException` for invalid parameters. `InvalidOperationException` for invalid object state (never `ArgumentOutOfRangeException` for property values). `OperationCanceledException` for cancellation.
 - **Installer signature bytes** are XOR-obfuscated — never add raw installer keyword strings to source to avoid false positives in single-file apps.
+- **Source-generated regex** — use `[GeneratedRegex]` on `partial` methods rather than `new Regex()`.
 - Follow existing code style, semantics, and naming patterns.
 
 ## Platform-Specific Behavior

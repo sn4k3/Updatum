@@ -1,8 +1,12 @@
 <Project>
     <PropertyGroup>
         <!-- Project -->
+        <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <Deterministic>true</Deterministic>
+
         <!-- Metadata -->
         <ProductName>Updatum</ProductName>
         <Company>PTRTECH</Company>
@@ -11,14 +15,14 @@
         <Copyright>Copyright 2025-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
         <Description>Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using GitHub Releases.
 It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.</Description>
-        <Version>1.3.6</Version>
+        <Version>1.3.7</Version>
 
         <!-- Package -->
         <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>
         <PackageIcon>$(ProductName)-128.png</PackageIcon>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <RepositoryType>Git</RepositoryType>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
         <RepositoryUrl>https://github.com/sn4k3/Updatum</RepositoryUrl>
@@ -29,10 +33,10 @@ It simplifies the update process by checking for new versions, retrieving releas
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-        <!-- Set the path map and artifacts path. -->
+        <!-- Paths -->
         <PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
         <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
-        <CommonPublishDir>$(ArtifactsPath)\publish</CommonPublishDir>
+        <CommonPublishDir>$(ArtifactsPath)/publish</CommonPublishDir>
 
         <!-- Enable Build Acceleration in Visual Studio. -->
         <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
@@ -44,9 +48,8 @@ It simplifies the update process by checking for new versions, retrieving releas
         <!-- No pack under Debug -->
         <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
 
-        <!-- ContinuousIntegrationBuild -->
-        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+        <!-- Reproducible builds in CI -->
+        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' Or '$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     </PropertyGroup>
 
     <ItemGroup>

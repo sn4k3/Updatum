@@ -1,4 +1,6 @@
-﻿namespace Updatum;
+﻿using StageKit.Runtime;
+
+namespace Updatum;
 
 /// <summary>
 /// Represents the state of the Updatum process.

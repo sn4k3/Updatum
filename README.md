@@ -1,6 +1,6 @@
 ﻿# [![Logo](https://raw.githubusercontent.com/sn4k3/Updatum/main/media/Updatum-32.png)](#) Updatum
 
-[![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/master/LICENSE)
+[![License](https://img.shields.io/github/license/sn4k3/Updatum?style=for-the-badge)](https://github.com/sn4k3/Updatum/blob/main/LICENSE)
 [![GitHub repo size](https://img.shields.io/github/repo-size/sn4k3/Updatum?style=for-the-badge)](#)
 [![Code size](https://img.shields.io/github/languages/code-size/sn4k3/Updatum?style=for-the-badge)](#)
 [![Nuget](https://img.shields.io/nuget/v/Updatum?style=for-the-badge)](https://www.nuget.org/packages/Updatum)

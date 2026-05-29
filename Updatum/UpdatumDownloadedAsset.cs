@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.Diagnostics;
+using System.IO;
 using Octokit;
 using Updatum.Extensions;
 
@@ -47,9 +49,9 @@ public record UpdatumDownloadedAsset(Release Release, ReleaseAsset ReleaseAsset,
         {
             File.Delete(FilePath);
         }
-        catch
+        catch (Exception e)
         {
-            // Ignore file deletion errors
+            Debug.WriteLine(e);
         }
 
     }

@@ -40,23 +40,23 @@ Uses a static `HttpClient` for downloads. Supports `SynchronizationContext` disp
 
 **Events:** `CheckForUpdateCompleted`, `UpdateFound`, `DownloadCompleted`, `InstallUpdateCompleted`.
 
-### `EntryApplication` (static utility, ~760 lines)
+### `EntryApplication` (from StageKit.Runtime)
 
-`Updatum/EntryApplication.cs` — lazily cached properties (`Lazy<T>`) for the running application: assembly info, paths, OS detection, runtime identifiers, bundle type detection (AppImage, Flatpak, macOS bundle, .NET single-file).
+`EntryApplication` is a static utility class provided by `StageKit.Runtime`. It exposes lazily cached properties (`Lazy<T>`) for the running application: assembly info, paths, OS detection, runtime identifiers, and bundle type detection (AppImage, Flatpak, macOS bundle, .NET single-file). `ApplicationBundleType` enum also lives in `StageKit.Runtime`.
 
 ### Supporting types
 
 - `UpdatumDownloadedAsset.cs` — `record` wrapping Release, ReleaseAsset, and FilePath for a completed download.
 - `UpdatumEnums.cs` — `UpdatumState`, `UpdatumWindowsExeType`, `UpdatumSingleFileExecutableNameStrategy`.
-- `ApplicationBundleType.cs` — enum for bundle detection (Unknown, None, DotNetSingleFile, LinuxAppImage, LinuxFlatpak, MacOSAppBundle).
 - `Extensions/Utilities.cs` — installer signature detection (XOR-obfuscated), script generation helpers (`BatchSetValue()`, `BashAnsiCString()`), process launch utilities. Public under `#if DEBUG` for testability.
 - `Extensions/GitHubExtensions.cs` — internal Octokit `Release` extension methods (tag version parsing).
 - `Extensions/ArchiveExtensions.cs` — internal `ZipArchiveEntry` helpers.
 
 ### Dependencies
 
-Intentionally lightweight — only two NuGet packages:
+Intentionally lightweight — three NuGet packages:
 - `Octokit` — GitHub API client
+- `StageKit.Runtime` — provides `EntryApplication` static utility and `ApplicationBundleType` enum
 - `Microsoft.SourceLink.GitHub` — Source Link (build-time only)
 
 Assembly is strong-named via `Updatum.snk`.

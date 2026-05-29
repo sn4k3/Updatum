@@ -17,6 +17,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using Octokit;
+using StageKit.Runtime;
 using Updatum.Extensions;
 
 namespace Updatum;
@@ -519,7 +520,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(_assetRegexPattern))
         {
-            AssetRegex = new Regex(_assetRegexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            AssetRegex = new Regex(_assetRegexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         }
     }
 
@@ -659,9 +660,6 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             }
 
             ReleasesAhead = releasesAheadList;
-            State = UpdatumState.None;
-
-            RaiseEvent(CheckForUpdateCompleted);
             if (IsUpdateAvailable) RaiseEvent(UpdateFound);
         }
         finally
@@ -671,6 +669,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             {
                 AutoUpdateCheckTimer.Start();
             }
+            RaiseEvent(CheckForUpdateCompleted);
         }
 
         return IsUpdateAvailable;
@@ -756,12 +755,11 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     public ReleaseAsset? GetCompatibleReleaseAsset(Release release)
     {
         if (release.Assets.Count == 0) return null;
-        if (string.IsNullOrWhiteSpace(AssetRegexPattern) || AssetRegex is null) return release.Assets[0];
 
         var candidateAssets = new List<ReleaseAsset>();
         foreach (var asset in release.Assets)
         {
-            if (!AssetRegex.IsMatch(asset.Name)) continue;
+            if (AssetRegex is not null && !AssetRegex.IsMatch(asset.Name)) continue;
             if (!string.IsNullOrWhiteSpace(AssetExtensionFilter) && !asset.Name.EndsWith(AssetExtensionFilter, StringComparison.OrdinalIgnoreCase)) continue;
             candidateAssets.Add(asset);
         }
@@ -991,6 +989,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
     public Task<bool> InstallUpdateAsync(UpdatumDownloadedAsset downloadedAsset, bool forceTerminate = true, string? runArguments = null)
     {
         if (!downloadedAsset.FileExists) throw new FileNotFoundException("File not found", downloadedAsset.FilePath);
+        if (IsBusy) return Task.FromResult(false);
 
         State = UpdatumState.InstallingUpdate;
 
@@ -1312,7 +1311,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
             }
             if (!string.IsNullOrWhiteSpace(EntryApplication.AssemblyLocation))
             {
-                killCommands.Add($"-f \"dotnet.+{Path.GetFileName(Regex.Escape(EntryApplication.AssemblyLocation))}\"");
+                killCommands.Add($"-f \"dotnet.+{Regex.Escape(Path.GetFileName(EntryApplication.AssemblyLocation))}\"");
             }
 
             if (killCommands.Count > 0)
@@ -1532,6 +1531,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                     WorkingDirectory = tmpPath,
                                     ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                                 });
+                            if (process is null) return false;
                         }
                         else // Linux or macOS
                         {
@@ -1686,6 +1686,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                 WorkingDirectory = tmpPath,
                                 ArgumentList = { "bash", upgradeScriptFilePath },
                             });
+                            if (process is null) return false;
                         }
 
                         if (forceTerminate) Environment.Exit(0);
@@ -1763,6 +1764,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                 WorkingDirectory = tmpPath,
                                 ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                             });
+                        if (process is null) return false;
 
                         if (forceTerminate) Environment.Exit(0); // Exit the application to install
                         return true;
@@ -1976,6 +1978,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                                 WorkingDirectory = tmpPath,
                                 ArgumentList = { "/D", "/C", upgradeScriptFilePath }
                             });
+                        if (process is null) return false;
 
 
                         if (forceTerminate) Environment.Exit(0); // Exit the application to install
@@ -2062,6 +2065,7 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
                             WorkingDirectory = tmpPath,
                             ArgumentList = { "bash", upgradeScriptFilePath },
                         });
+                        if (process is null) return false;
 
                         if (forceTerminate) Environment.Exit(0); // Exit the application to install
 
@@ -2253,6 +2257,11 @@ public partial class UpdatumManager : INotifyPropertyChanged, IDisposable
         if (disposing)
         {
             _autoUpdateCheckTimer?.Dispose();
+            _propertyChanged = null;
+            CheckForUpdateCompleted = null;
+            UpdateFound = null;
+            DownloadCompleted = null;
+            InstallUpdateCompleted = null;
         }
 
         _disposed = true;

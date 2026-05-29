@@ -1,8 +1,10 @@
-# v1.4.0 (16/04/2026)
+# v1.4.0 (29/05/2026)
 - Add `StageKit.Runtime` dependency and drop `EntryApplication` class in favor of `StageKit.Runtime` `EntryApplication`
-- Add `IsBusy` guard to InstallUpdateAsync and fix Regex.Escape usage when composing kill commands.
+- Add `IsBusy` guard to InstallUpdateAsync and fix `Regex.Escape` usage when composing kill commands.
+- Add null checks after starting processes in install/upgrade flows to avoid NREs.
 - Improve AssetRegex creation (add CultureInvariant and a timeout) and guard
-
+- Move CheckForUpdateCompleted event raise to after timer restart for consistent behavior.
+- Clear event handlers and property-changed callbacks in Dispose.
 
 # v1.3.7 (16/04/2026)
 - Remove always null first condition on `AssemblyVersionStringLazy` 

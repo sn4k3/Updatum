@@ -16,12 +16,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 dotnet restore                                          # Restore dependencies
 dotnet build                                            # Build entire solution
-dotnet test                                             # Run tests (no test project yet, no-op)
-dotnet pack Updatum --configuration Release --output .  # Pack NuGet package
 dotnet run --project Updatum.FakeApp                    # Run example app
+dotnet pack Updatum --configuration Release --output .  # Pack NuGet package
+dotnet test Updatum.Fallout.Tests                        # Run the Fallout build-tooling unit tests
 ```
 
-Requires .NET SDK 8.0+. Multi-targets net8.0/net9.0/net10.0. CI uses .NET 10.0. Solution file is `Updatum.slnx` (XML-based `.slnx` format, not classic `.sln`).
+Requires .NET SDK 8.0+. Multi-targets net8.0/net9.0/net10.0 for the `Updatum` library itself; the build-tooling projects (`Updatum.Build`, `Updatum.Fallout`, `Updatum.Fallout.Tests`) target net10.0 only. CI uses .NET 10.0. Solution file is `Updatum.slnx` (XML-based `.slnx` format, not classic `.sln`).
+
+### Custom build pipeline (Fallout)
+
+`./build.cmd` / `./build.sh` / `./build.ps1` bootstrap a pinned .NET SDK and run **`Updatum.Build`**, a build automation script analogous to a Nuke build, but built on the author's own **Fallout.Common** package instead of Nuke. Targets are invoked positionally, e.g.:
+
+```bash
+./build.cmd Compile               # default target
+./build.cmd Publish --configuration Release --r-ids win-x64 linux-x64
+./build.cmd Print                 # dumps resolved build variables for debugging
+```
+
+`Updatum.Build/Build.cs` is the thin, repo-specific `Build : UpdatumBuild` entry point (`Updatum.Build.csproj`). `Updatum.Fallout` is the reusable class library holding the actual Updatum-specific build/publish/bundle logic (`UpdatumBuild` partial class, split by platform: `UpdatumBuild.cs`, `.Windows.cs`, `.Linux.cs`, `.MacOS.cs`, `.Publish.cs`). `Updatum.Fallout.Tests` is an xUnit v3 test project covering that logic (`InternalsVisibleTo` from `Updatum.Fallout`). Build state/logs land in `.fallout/` (gitignored working directory, analogous to Nuke's `.nuke/`).
+
+Key `UpdatumBuild` targets: `Restore`, `Compile`, `Run`, `Publish`, `Clean`, `Print`. `Publish` publishes every configured RID (`RIds` parameter) and, unless `--publish-no-bundles`, creates bundles per `PublishBundles` flags (`DotNetSingleExecutable` zip, `WindowsInstaller`, `MacOSAppBundle`, `LinuxAppImage`) via `CreateBundles`/`CreatePortableZip`/platform-specific creators.
 
 ## Architecture
 
@@ -54,12 +68,12 @@ Uses a static `HttpClient` for downloads. Supports `SynchronizationContext` disp
 
 ### Dependencies
 
-Intentionally lightweight — three NuGet packages:
+The `Updatum` library is intentionally lightweight — three NuGet packages:
 - `Octokit` — GitHub API client
 - `StageKit.Runtime` — provides `EntryApplication` static utility and `ApplicationBundleType` enum
 - `Microsoft.SourceLink.GitHub` — Source Link (build-time only)
 
-Assembly is strong-named via `Updatum.snk`.
+Assembly is strong-named via `Updatum.snk`. The `Updatum.Fallout` build-tooling library depends separately on `Fallout.Common` — do not conflate this with the runtime library's dependency set above.
 
 ## Coding Conventions
 
@@ -73,6 +87,7 @@ Assembly is strong-named via `Updatum.snk`.
 - **Exceptions:** `ArgumentException`/`ArgumentNullException` for invalid parameters. `InvalidOperationException` for invalid object state (never `ArgumentOutOfRangeException` for property values). `OperationCanceledException` for cancellation.
 - **Installer signature bytes** are XOR-obfuscated — never add raw installer keyword strings to source to avoid false positives in single-file apps.
 - **Source-generated regex** — use `[GeneratedRegex]` on `partial` methods rather than `new Regex()`.
+- Do not add new NuGet dependencies to the `Updatum` library without discussion; keep it lightweight.
 - Follow existing code style, semantics, and naming patterns.
 
 ## Platform-Specific Behavior

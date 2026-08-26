@@ -8,24 +8,26 @@
         <Deterministic>true</Deterministic>
 
         <!-- Metadata -->
-        <ProductName>Updatum</ProductName>
+        <SolutionName Condition="'$(SolutionName)' == '' And $([System.IO.Directory]::GetFiles('$(MSBuildThisFileDirectory)', '*.sln').Length) &gt; 0">$([System.IO.Path]::GetFileNameWithoutExtension($([System.IO.Directory]::GetFiles('$(MSBuildThisFileDirectory)', '*.sln')[0])))</SolutionName>
+        <SolutionName Condition="'$(SolutionName)' == '' And $([System.IO.Directory]::GetFiles('$(MSBuildThisFileDirectory)', '*.slnx').Length) &gt; 0">$([System.IO.Path]::GetFileNameWithoutExtension($([System.IO.Directory]::GetFiles('$(MSBuildThisFileDirectory)', '*.slnx')[0])))</SolutionName>
+        <SolutionName Condition="'$(SolutionName)' == ''">$([System.IO.Path]::GetFileNameWithoutExtension($(MSBuildProjectDirectory)))</SolutionName>
+        <ProductName>$(SolutionName)</ProductName>
         <Company>PTRTECH</Company>
         <CompanyRDNS>pt.ptrtech</CompanyRDNS>
         <Authors>Tiago Conceição</Authors>
         <Copyright>Copyright 2025-$([System.DateTime]::Now.ToString(`yyyy`)) © PTRTECH</Copyright>
-        <Description>Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using GitHub Releases.
-It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.</Description>
+        <Description>Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using GitHub Releases. It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.</Description>
         <Version>1.4.0</Version>
 
         <!-- Package -->
-        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(ProductName).ico</ApplicationIcon>
-        <PackageIcon>$(ProductName)-128.png</PackageIcon>
+        <ApplicationIcon>$(MSBuildThisFileDirectory)media\$(SolutionName).ico</ApplicationIcon>
+        <PackageIcon>$(SolutionName)-128.png</PackageIcon>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <RepositoryType>Git</RepositoryType>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
-        <RepositoryUrl>https://github.com/sn4k3/Updatum</RepositoryUrl>
+        <RepositoryUrl>https://github.com/sn4k3/$(SolutionName)</RepositoryUrl>
         <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
         <PackageReleaseNotes>$(RepositoryUrl)/releases</PackageReleaseNotes>
         <PackageTags>Updatum;updater;appupdater;versionchecker;auto-update;github-releases;version-check;changelog;self-updating</PackageTags>
@@ -43,7 +45,7 @@ It simplifies the update process by checking for new versions, retrieving releas
 
         <!-- Sign -->
         <SignAssembly>True</SignAssembly>
-        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(ProductName).snk</AssemblyOriginatorKeyFile>
+        <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)$(SolutionName).snk</AssemblyOriginatorKeyFile>
 
         <!-- No pack under Debug -->
         <IsPackable Condition="'$(Configuration)' == 'Debug'">false</IsPackable>
@@ -53,7 +55,19 @@ It simplifies the update process by checking for new versions, retrieving releas
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)media\$(ProductName)-128.png" Pack="true" PackagePath="" Visible="false"/>
-        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)media\$(SolutionName)-128.png" Pack="true" PackagePath="" Visible="false"/>
     </ItemGroup>
+
+    <Choose>
+        <When Condition="Exists('$(MSBuildProjectDirectory)\README.md')">
+            <ItemGroup>
+                <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="" Visible="false"/>
+            </ItemGroup>
+        </When>
+        <When Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
+            <ItemGroup>
+                <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="false"/>
+            </ItemGroup>
+        </When>
+    </Choose>
 </Project>

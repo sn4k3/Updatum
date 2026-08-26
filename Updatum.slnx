@@ -8,6 +8,12 @@
     <File Path="LICENSE" />
     <File Path="README.md" />
   </Folder>
+  <Project Path="Updatum.Build/Updatum.Build.csproj" />
+  <Project Path="Updatum.FakeApp.Installer/Updatum.FakeApp.Installer.wixproj">
+    <Build Solution="*|*" Project="false" />
+  </Project>
   <Project Path="Updatum.FakeApp/Updatum.FakeApp.csproj" Id="766dd272-0dc1-48f4-83de-3a61aa2fb988" />
+  <Project Path="Updatum.Fallout/Updatum.Fallout.csproj" />
+  <Project Path="Updatum.Fallout.Tests/Updatum.Fallout.Tests.csproj" />
   <Project Path="Updatum/Updatum.csproj" />
 </Solution>

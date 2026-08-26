@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <GenerateDocumentationFile>True</GenerateDocumentationFile>
+
+        <Version>1.0.0</Version>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400" PrivateAssets="All"/>
+        <PackageReference Include="Fallout.Common" Version="10.4.0"/>
+        <PackageReference Include="Fallout.Utilities" Version="10.4.0"/>
+        <PackageReference Include="StageKit.Runtime" Version="0.2.6" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Updatum.Fallout.Tests, PublicKey=0024000004800000940000000602000000240000525341310004000001000100C574B94965A9CFD31450EB8E225A8A74FFCC5F249DD5074F3DB4DE7B3E59A97B443642F15FD185C900D5AC8EBD6791A58E16A1B7174838BB31826AF2429B0B46B378A8B58C3F20DA926906BD67F8DA5FCDDC769E2CC89E2F97A2081CC93D4920FA55F4D73E418EA83550E8AA35F3980D152012310EE3E25BC9D215332AD1DDAE"/>
+    </ItemGroup>
+
+</Project>

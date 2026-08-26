@@ -458,3 +458,8 @@ $RECYCLE.BIN/
 
 # nuke
 .nuke/temp/
+.fallout/temp/
+
+# AI
+.serena/
+.superpowers/

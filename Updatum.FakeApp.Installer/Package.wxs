@@ -1,0 +1,50 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+    <Package Name="$(var.ApplicationName)"
+             Manufacturer="$(var.Company)"
+             Version="$(var.BuildVersion)"
+             UpgradeCode="$(var.UpgradeCode)"
+             Language="1033"
+             Scope="perMachine"
+             Compressed="yes">
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Icon Id="ProductIcon.ico" SourceFile="$(var.ApplicationIcon)" />
+        <Property Id="ARPPRODUCTICON" Value="ProductIcon.ico" />
+        <Property Id="ARPURLINFOABOUT" Value="$(var.RepositoryUrl)" />
+        <Property Id="ARPHELPLINK" Value="$(var.RepositoryUrl)/issues" />
+        <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" />
+
+        <StandardDirectory Id="ProgramFiles6432Folder">
+            <Directory Id="INSTALLFOLDER" Name="$(var.ApplicationName)">
+                <Component Id="MainExecutableComponent" Guid="*">
+                    <File Id="MainExecutable"
+                          Source="!(bindpath.Publish)\$(var.ApplicationName).exe"
+                          KeyPath="yes">
+                        <Shortcut Id="StartMenuShortcut"
+                                  Directory="ApplicationProgramsFolder"
+                                  Name="$(var.ApplicationName)"
+                                  Description="$(var.ApplicationName)"
+                                  WorkingDirectory="INSTALLFOLDER"
+                                  Advertise="yes" />
+                    </File>
+                    <RemoveFolder Id="RemoveApplicationProgramsFolder"
+                                  Directory="ApplicationProgramsFolder"
+                                  On="uninstall" />
+                </Component>
+
+                <Files Include="!(bindpath.Publish)\**">
+                    <Exclude Files="!(bindpath.Publish)\$(var.ApplicationName).exe" />
+                </Files>
+            </Directory>
+        </StandardDirectory>
+
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ApplicationProgramsFolder" Name="$(var.ApplicationName)" />
+        </StandardDirectory>
+
+        <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+        <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseFile)" />
+    </Package>
+</Wix>

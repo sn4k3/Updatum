@@ -1,0 +1,49 @@
+<Project Sdk="WixToolset.Sdk/7.0.0">
+
+    <PropertyGroup>
+        <OutputType>Package</OutputType>
+        <AcceptEula>wix7</AcceptEula>
+        <InstallerPlatform>$(Platform)</InstallerPlatform>
+        <OutputName>$(ApplicationName)_$(RuntimeIdentifier)_v$(BuildVersion)</OutputName>
+        <LicenseFile>$(MSBuildProjectDirectory)\License.rtf</LicenseFile>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Platform)' == 'x64'">
+        <UpgradeCode>363E3F2A-9A03-4342-89DA-04012BC337F8</UpgradeCode>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Platform)' == 'arm64'">
+        <UpgradeCode>875B67E9-011B-4EDE-8EB2-9661B851C9D4</UpgradeCode>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <DefineConstants>$(DefineConstants);ApplicationName=$(ApplicationName);BuildVersion=$(BuildVersion);Company=$(Company);Copyright=$(Copyright);RepositoryUrl=$(RepositoryUrl);ApplicationIcon=$(ApplicationIcon);LicenseFile=$(LicenseFile);UpgradeCode=$(UpgradeCode)</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <BindPath Include="$(PublishDirectory)" BindName="Publish" />
+        <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
+    </ItemGroup>
+
+    <Target Name="ValidateInstallerInputs" BeforeTargets="CoreCompile">
+        <Error Condition="'$(PublishDirectory)' == ''"
+               Text="PublishDirectory must be provided by the Fallout publish pipeline." />
+        <Error Condition="'$(ApplicationName)' == ''"
+               Text="ApplicationName must be provided by the Fallout publish pipeline." />
+        <Error Condition="'$(BuildVersion)' == ''"
+               Text="BuildVersion must be provided by the Fallout publish pipeline." />
+        <Error Condition="'$(RuntimeIdentifier)' == ''"
+               Text="RuntimeIdentifier must be provided by the Fallout publish pipeline." />
+        <Error Condition="'$(Platform)' != 'x64' And '$(Platform)' != 'arm64'"
+               Text="Platform must be x64 or arm64, but was '$(Platform)'." />
+        <Error Condition="!Exists('$(PublishDirectory)')"
+               Text="PublishDirectory '$(PublishDirectory)' does not exist." />
+        <Error Condition="!Exists('$(PublishDirectory)\$(ApplicationName).exe')"
+               Text="Application executable '$(PublishDirectory)\$(ApplicationName).exe' does not exist." />
+        <Error Condition="!Exists('$(ApplicationIcon)')"
+               Text="Application icon '$(ApplicationIcon)' does not exist." />
+        <Error Condition="!Exists('$(LicenseFile)')"
+               Text="Installer license '$(LicenseFile)' does not exist." />
+    </Target>
+
+</Project>

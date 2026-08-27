@@ -13,10 +13,15 @@ public static class UnixSystem
     /// Marks a Unix launcher as executable.
     /// </summary>
     /// <param name="executablePath">The launcher path.</param>
+    /// <remarks>
+    /// Windows has no Unix mode bits, so the call is a no-op there. Bundle creation that depends on the
+    /// execute bit is already gated on a matching host, and a cross-built payload staged on Windows simply
+    /// carries no mode to set.
+    /// </remarks>
     public static void SetUnixExecutable(AbsolutePath executablePath)
     {
         if (OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException("Unix executable permissions are unavailable on Windows.");
+            return;
 
         File.SetUnixFileMode(executablePath,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |

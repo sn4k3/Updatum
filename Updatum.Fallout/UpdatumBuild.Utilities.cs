@@ -4,10 +4,12 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using Fallout.Common.IO;
+using Fallout.Common.Tooling;
 using Fallout.Persistence.Solution.Serializer;
 using Fallout.Solutions;
 using Serilog;
@@ -16,6 +18,53 @@ namespace Updatum.Fallout;
 
 public partial class UpdatumBuild
 {
+    /// <summary>
+    /// The time budget for one <see cref="DownloadFile"/> call, covering the response body and not just the
+    /// response headers.
+    /// </summary>
+    protected static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(10);
+
+    private static readonly HttpClient Client = new()
+    {
+        Timeout = DownloadTimeout
+    };
+
+    /// <summary>
+    /// Deletes a file-system entry regardless of whether it is a regular file or directory.
+    /// </summary>
+    /// <param name="path">The file-system entry path.</param>
+    protected virtual void DeleteFileSystemEntry(AbsolutePath path)
+    {
+        path.DeleteFile();
+        path.DeleteDirectory();
+    }
+
+    /// <summary>
+    /// Downloads a file to a protected local path.
+    /// </summary>
+    /// <param name="url">The source URL.</param>
+    /// <param name="destination">The destination file path.</param>
+    protected virtual void DownloadFile(string url, AbsolutePath destination)
+    {
+        using var response = Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
+            .GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        using var source = response.Content.ReadAsStream();
+        using var target = File.Create(destination);
+        source.CopyTo(target);
+    }
+
+    /// <summary>
+    /// Executes a shell command in the specified working directory.
+    /// </summary>
+    /// <param name="command">The shell command.</param>
+    /// <param name="workingDirectory">The command working directory.</param>
+    protected virtual void ExecuteShell(string command, AbsolutePath workingDirectory)
+    {
+        using var process = ProcessTasks.StartShell(command, workingDirectory);
+        process.AssertWaitForExit();
+    }
+
     /// <summary>
     /// Determines whether the specified project is a runnable project based on its output type.
     /// </summary>
@@ -45,7 +94,7 @@ public partial class UpdatumBuild
     private static AbsolutePath[] FindSolutionFiles(AbsolutePath directory, string searchPattern)
     {
         return directory.GetFiles(searchPattern)
-            .OrderBy(path => (string)path, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path.ToString(), StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -156,7 +205,7 @@ public partial class UpdatumBuild
         Project project,
         string requestedPropertyName)
     {
-        var projectPath = (string)project.Path;
+        var projectPath = project.Path;
         if (_evaluatedProjectProperties.TryGetValue(projectPath, out var cachedProperties) &&
             cachedProperties.ContainsKey(requestedPropertyName))
             return cachedProperties;
@@ -198,10 +247,10 @@ public partial class UpdatumBuild
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
-            WorkingDirectory = (string)project.Path.Parent
+            WorkingDirectory = project.Path.Parent
         };
         startInfo.ArgumentList.Add("msbuild");
-        startInfo.ArgumentList.Add((string)project.Path);
+        startInfo.ArgumentList.Add(project.Path);
         startInfo.ArgumentList.Add($"-getProperty:{string.Join(',', propertyNames)}");
         startInfo.ArgumentList.Add("-nologo");
 
@@ -257,12 +306,12 @@ public partial class UpdatumBuild
     /// </summary>
     /// <param name="value">The value of the property to check.</param>
     /// <param name="propertyName">The name of the property to check.</param>
-    /// <exception cref="Exception"></exception>
+    /// <exception cref="InvalidOperationException">The property could not be determined.</exception>
     protected void ThrowIfMissingProperty([NotNull] string? value,
         [CallerMemberName] string propertyName = "")
     {
         if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException(
+            throw new InvalidOperationException(
                 $"Property '{propertyName}' could not be determined from the '{MainProject.Name}' main project or solution properties. Please define it in the project file or implement the property.");
     }
 }

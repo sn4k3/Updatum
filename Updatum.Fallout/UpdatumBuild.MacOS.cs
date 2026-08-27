@@ -12,13 +12,19 @@ namespace Updatum.Fallout;
 public partial class UpdatumBuild
 {
     /// <summary>
+    /// The synthetic runtime identifier reported for multi-architecture macOS artifacts.
+    /// </summary>
+    public const string MultiArchMacOSRuntimeIdentifier = "osx-multiarch";
+
+    /// <summary>
     /// Selects and creates the configured macOS application bundles.
     /// </summary>
     /// <param name="contexts">The successfully published runtime contexts.</param>
     protected virtual void CreateMacOSApps(IReadOnlyCollection<PublishRidContext> contexts)
     {
         var macContexts = contexts
-            .Where(context => context.RuntimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase))
+            .Where(context => PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier).Family
+                is PublishRidFamily.MacOS)
             .ToArray();
         if (macContexts.Length == 0)
             return;
@@ -70,7 +76,7 @@ public partial class UpdatumBuild
         {
             throw new FileNotFoundException(
                 $"The configured macOS application icon '{MacOSIconFile}' does not exist.",
-                (string)MacOSIconFile);
+                MacOSIconFile);
         }
 
         var options = MacAppBundleOptions;
@@ -133,7 +139,7 @@ public partial class UpdatumBuild
         PublishRidContext arm64Context)
     {
         var stagingPath = PublishStagingDirectory / Guid.NewGuid().ToString("N");
-        var archivePath = PublishDirectory / $"{SoftwareName}_osx-multiarch_v{SoftwareVersion}.zip";
+        var archivePath = (AbsolutePath)$"{GetMultiArchMacOSBundleOutputPath(x64Context)}.zip";
 
         try
         {
@@ -178,13 +184,25 @@ public partial class UpdatumBuild
         }
     }
 
+    /// <summary>
+    /// Resolves the base output path for the multi-architecture macOS artifact through <see cref="AssetName"/>.
+    /// </summary>
+    /// <param name="context">Any macOS runtime publish context taking part in the bundle.</param>
+    /// <returns>The validated base output path, without an extension.</returns>
+    protected virtual AbsolutePath GetMultiArchMacOSBundleOutputPath(PublishRidContext context)
+    {
+        var assetContext = context with { RuntimeIdentifier = MultiArchMacOSRuntimeIdentifier };
+        var assetName = PublishUtilities.ValidatePathLeafName(AssetName(assetContext), nameof(AssetName));
+        return PublishUtilities.GetDirectChildPath(PublishDirectory, assetName, nameof(AssetName));
+    }
+
     private void ResolveMacOSPathOptions(MacAppBundleOptions options)
     {
-        options.IconFileName = ValidateMacOSPathName(
+        options.IconFileName = PublishUtilities.ValidatePathLeafName(
             options.IconFileName ?? $"{options.ProductName}.icns",
             $"{nameof(MacAppBundleOptions)}.{nameof(MacAppBundleOptions.IconFileName)}");
 
-        var executableName = ValidateMacOSPathName(
+        var executableName = PublishUtilities.ValidatePathLeafName(
             options.ExecutableName ?? options.ProductName,
             $"{nameof(MacAppBundleOptions)}.{nameof(MacAppBundleOptions.ExecutableName)}");
         options.ExecutableName = executableName;
@@ -192,10 +210,10 @@ public partial class UpdatumBuild
         if (!PublishMultiArch)
             return;
 
-        var x64RuntimeIdentifier = ValidateMacOSPathName(
+        var x64RuntimeIdentifier = PublishUtilities.ValidatePathLeafName(
             options.X64RuntimeIdentifier,
             $"{nameof(MacAppBundleOptions)}.{nameof(MacAppBundleOptions.X64RuntimeIdentifier)}");
-        var arm64RuntimeIdentifier = ValidateMacOSPathName(
+        var arm64RuntimeIdentifier = PublishUtilities.ValidatePathLeafName(
             options.Arm64RuntimeIdentifier,
             $"{nameof(MacAppBundleOptions)}.{nameof(MacAppBundleOptions.Arm64RuntimeIdentifier)}");
 
@@ -214,20 +232,6 @@ public partial class UpdatumBuild
         }
     }
 
-    private static string ValidateMacOSPathName(string? value, string optionName)
-    {
-        if (string.IsNullOrWhiteSpace(value) ||
-            Path.IsPathRooted(value) ||
-            value.Contains('/') ||
-            value.Contains('\\') ||
-            value is "." or "..")
-        {
-            throw new InvalidOperationException($"{optionName} must be a nonblank simple leaf name.");
-        }
-
-        return value;
-    }
-
     private static void ValidateMacOSPayload(PublishRidContext context, string executableName)
     {
         var executablePath = context.PublishPath / executableName;
@@ -235,7 +239,7 @@ public partial class UpdatumBuild
         {
             throw new FileNotFoundException(
                 $"Published executable '{executablePath}' does not exist for '{context.RuntimeIdentifier}'.",
-                (string)executablePath);
+                executablePath);
         }
     }
 
@@ -245,7 +249,8 @@ public partial class UpdatumBuild
     /// <param name="appPath">The application bundle path.</param>
     protected virtual void SignMacOSApp(AbsolutePath appPath)
     {
-        ProcessTasks.StartProcess("codesign", $"--force --deep --sign - \"{appPath}\"")
-            .AssertWaitForExit();
+        using var process = ProcessTasks.StartProcess("codesign",
+            $"--force --deep --sign - {AppBundleUtilities.QuoteProcessArgument(appPath)}");
+        process.AssertWaitForExit();
     }
 }

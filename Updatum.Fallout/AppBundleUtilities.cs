@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Text;
 
 namespace Updatum.Fallout;
 
@@ -39,6 +40,39 @@ public static class AppBundleUtilities
     public static string QuoteShell(string value)
     {
         return $"'{value.Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
+    }
+
+    /// <summary>
+    /// Quotes a string for use as a single argument in a process argument line, using the escaping rules the
+    /// .NET process launcher applies (double quotes, with backslashes doubled before a quote).
+    /// </summary>
+    /// <param name="value">The argument to quote.</param>
+    /// <returns>The quoted argument.</returns>
+    public static string QuoteProcessArgument(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var builder = new StringBuilder(value.Length + 2).Append('"');
+        var backslashes = 0;
+        foreach (var character in value)
+        {
+            switch (character)
+            {
+                case '\\':
+                    backslashes++;
+                    break;
+                case '"':
+                    builder.Append('\\', backslashes * 2 + 1).Append('"');
+                    backslashes = 0;
+                    break;
+                default:
+                    builder.Append('\\', backslashes).Append(character);
+                    backslashes = 0;
+                    break;
+            }
+        }
+
+        return builder.Append('\\', backslashes * 2).Append('"').ToString();
     }
 
     /// <summary>

@@ -8,11 +8,15 @@ namespace Updatum.Fallout;
 /// </summary>
 public static class LinuxSystem
 {
-    private static bool? _isFuseAvailable = null;
+    private static bool? _isFuseAvailable;
 
     /// <summary>
     /// Determines whether the FUSE 2 library required by traditional AppImage mounting is available.
     /// </summary>
+    /// <remarks>
+    /// The result is diagnostic only: appimagetool is always extracted before use, so a missing FUSE 2 is
+    /// reported but never blocks a build.
+    /// </remarks>
     /// <returns><see langword="true"/> when FUSE 2 is available; otherwise, <see langword="false"/>.</returns>
     public static bool IsFuseAvailable
     {

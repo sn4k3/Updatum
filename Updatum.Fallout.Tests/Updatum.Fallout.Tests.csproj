@@ -4,15 +4,17 @@
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
+        <!--
+            xunit.v3 runs on Microsoft.Testing.Platform and brings its own in-process runner, so neither
+            Microsoft.NET.Test.Sdk nor the VSTest adapter is referenced. The `dotnet test` opt-in lives in
+            ./global.json ("test": { "runner": ... }) because the .NET 10 SDK removed the VSTest bridge.
+        -->
+        <OutputType>Exe</OutputType>
+        <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0"/>
         <PackageReference Include="xunit.v3" Version="4.0.0"/>
-        <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>

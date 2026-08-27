@@ -23,7 +23,7 @@ public class SolutionDiscoveryTests
 
             var solution = build.Solution;
 
-            Assert.Equal(Path.GetFullPath(slnxPath), (string)solution.Path);
+            Assert.Equal(Path.GetFullPath(slnxPath), solution.Path);
             Assert.Same(solution, build.Solution);
         }
         finally
@@ -43,7 +43,7 @@ public class SolutionDiscoveryTests
 
             var solution = new TestBuild((AbsolutePath)directory).Solution;
 
-            Assert.Equal(Path.GetFullPath(slnPath), (string)solution.Path);
+            Assert.Equal(Path.GetFullPath(slnPath), solution.Path);
         }
         finally
         {

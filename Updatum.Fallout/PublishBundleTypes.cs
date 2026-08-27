@@ -9,6 +9,11 @@ namespace Updatum.Fallout;
 public enum PublishBundleTypes
 {
     /// <summary>
+    /// Publish no bundles.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
     /// Publish the complete multi-file release as a portable ZIP archive.
     /// </summary>
     Portable = 1 << 0,

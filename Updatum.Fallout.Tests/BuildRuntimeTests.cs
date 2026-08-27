@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 using StageKit.Runtime;
 using Xunit;
@@ -39,7 +39,8 @@ public class BuildRuntimeTests
 
         var json = JsonSerializer.Serialize(runtime);
 
-        Assert.Contains("\"BundleType\":\"Installer\"", json, StringComparison.Ordinal);
+        Assert.Contains($"\"BundleType\":\"{nameof(ApplicationBundleType.WindowsInstaller)}\"", json,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -53,6 +54,7 @@ public class BuildRuntimeTests
 
         var json = JsonSerializer.Serialize(runtime);
 
-        Assert.Contains("\"BundleType\":\"DotNetSingleFileApp\"", json, StringComparison.Ordinal);
+        Assert.Contains($"\"BundleType\":\"{nameof(ApplicationBundleType.DotNetSingleFile)}\"", json,
+            StringComparison.Ordinal);
     }
 }

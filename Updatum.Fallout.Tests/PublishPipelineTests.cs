@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -9,6 +9,7 @@ using System.Text.Json;
 using Fallout.Common.IO;
 using Fallout.Common.Tools.DotNet;
 using Fallout.Solutions;
+using StageKit.Runtime;
 using Xunit;
 
 namespace Updatum.Fallout.Tests;
@@ -256,10 +257,10 @@ public class PublishPipelineTests
 
         var settings = build.InvokeCreatePublishSettings(context);
 
-        Assert.Equal((string)build.TestMainProject.Path, settings.Project);
+        Assert.Equal(build.TestMainProject.Path, settings.Project);
         Assert.Equal("Release", settings.Configuration);
         Assert.Equal("linux-x64", settings.Runtime);
-        Assert.Equal((string)context.PublishPath, settings.Output);
+        Assert.Equal(context.PublishPath, settings.Output);
         Assert.True(settings.SelfContained);
         Assert.True(settings.NoRestore);
         Assert.True(Assert.IsType<JsonElement>(settings.Properties["PublishReadyToRun"]).GetBoolean());
@@ -290,7 +291,8 @@ public class PublishPipelineTests
         using var manifest = JsonDocument.Parse(build.CapturedRuntimeManifest);
         Assert.Equal("win-x64", manifest.RootElement.GetProperty("Runtime").GetString());
         Assert.True(manifest.RootElement.GetProperty("IsBundle").GetBoolean());
-        Assert.Equal("DotNetSingleFileApp", manifest.RootElement.GetProperty("BundleType").GetString());
+        Assert.Equal(nameof(ApplicationBundleType.DotNetSingleFile),
+            manifest.RootElement.GetProperty("BundleType").GetString());
         Assert.Contains("<Content Include=\"$(FalloutBuildRuntimeManifest)\"",
             build.CapturedSingleFileTargets);
         Assert.Contains("<ExcludeFromSingleFile>false</ExcludeFromSingleFile>",
@@ -336,7 +338,7 @@ public class PublishPipelineTests
         var settings = build.InvokeCreateInstallerPublishSettings(context, installerOutput);
 
         Assert.False(Assert.IsType<JsonElement>(settings.Properties["PublishSingleFile"]).GetBoolean());
-        Assert.Equal((string)installerOutput, settings.Output);
+        Assert.Equal(installerOutput, settings.Output);
     }
 
     /// <summary>
@@ -539,12 +541,12 @@ public class PublishPipelineTests
         try
         {
             var build = CreateTargetBuild(rootDirectory, false, false, "linux-x64");
-            File.WriteAllText((string)build.TestChangelogFile,
+            File.WriteAllText(build.TestChangelogFile,
                 "# Changelog\n\n## 2.0.0\n\nNew release.\n\n## 1.0.0\nOld release.");
 
             build.InvokeExecutePublish();
 
-            Assert.Equal("New release.", File.ReadAllText((string)build.TestReleaseNotesFile));
+            Assert.Equal("New release.", File.ReadAllText(build.TestReleaseNotesFile));
         }
         finally
         {
@@ -782,12 +784,12 @@ public class PublishPipelineTests
         try
         {
             var build = CreateTargetBuild(rootDirectory, false, false, "linux-x64");
-            File.WriteAllText((string)build.TestChangelogFile, "# Changelog\nNo releases yet.");
-            File.WriteAllText((string)build.TestReleaseNotesFile, "Existing release notes.");
+            File.WriteAllText(build.TestChangelogFile, "# Changelog\nNo releases yet.");
+            File.WriteAllText(build.TestReleaseNotesFile, "Existing release notes.");
 
             build.InvokeExecutePublish();
 
-            Assert.Equal("Existing release notes.", File.ReadAllText((string)build.TestReleaseNotesFile));
+            Assert.Equal("Existing release notes.", File.ReadAllText(build.TestReleaseNotesFile));
         }
         finally
         {
@@ -987,7 +989,7 @@ public class PublishPipelineTests
                 using var manifestStream = manifestEntry.Open();
                 using var manifest = JsonDocument.Parse(manifestStream);
                 Assert.Equal("win-x64", manifest.RootElement.GetProperty("Runtime").GetString());
-                Assert.True(manifest.RootElement.GetProperty("IsBundle").GetBoolean());
+                Assert.False(manifest.RootElement.GetProperty("IsBundle").GetBoolean());
                 Assert.Equal("None", manifest.RootElement.GetProperty("BundleType").GetString());
             }
 
@@ -995,7 +997,7 @@ public class PublishPipelineTests
                 JsonDocument.Parse(File.ReadAllText(Path.Combine(publishDirectory, "runtime.json")));
             Assert.False(rawManifest.RootElement.GetProperty("IsBundle").GetBoolean());
 
-            var stagingRoot = Path.Combine((string)UpdatumBuild.TemporaryDirectory, "publish-staging");
+            var stagingRoot = Path.Combine(UpdatumBuild.TemporaryDirectory, "publish-staging");
             if (Directory.Exists(stagingRoot))
                 Assert.Empty(Directory.EnumerateDirectories(stagingRoot));
         }
@@ -1003,6 +1005,24 @@ public class PublishPipelineTests
         {
             Directory.Delete(rootDirectory, true);
         }
+    }
+
+    /// <summary>
+    /// Verifies that a macOS app bundle suppresses the colliding portable ZIP artifact.
+    /// </summary>
+    [Theory]
+    [InlineData("win-x64", PublishBundleTypes.MacOSAppBundle, true)]
+    [InlineData("osx-x64", PublishBundleTypes.None, true)]
+    [InlineData("osx-x64", PublishBundleTypes.MacOSAppBundle, false)]
+    public void ShouldCreatePortableZip_MacOSAppBundleSelection_AvoidsArtifactCollision(
+        string rid,
+        PublishBundleTypes bundleTypes,
+        bool expected)
+    {
+        var build = new TestBuild();
+        build.SetPublishBundles(bundleTypes);
+
+        Assert.Equal(expected, build.InvokeShouldCreatePortableZip(rid));
     }
 
     /// <summary>
@@ -1056,7 +1076,7 @@ public class PublishPipelineTests
     public void ParseRuntimeIdentifier_WindowsRid_MapsInstallerPlatform(string runtimeIdentifier,
         string expectedPlatform)
     {
-        var runtime = PublishUtilities.ParseRuntimeIdentifier(runtimeIdentifier);
+        var runtime = PublishRid.ParseRuntimeIdentifier(runtimeIdentifier);
 
         Assert.Equal(expectedPlatform, runtime.InstallerPlatform);
     }
@@ -1195,17 +1215,17 @@ public class PublishPipelineTests
             var downloadedPath = Path.Combine(cacheDirectory, "appimagetool-x86_64.AppImage");
             var expectedAppRun = Path.Combine(cacheDirectory, "squashfs-root-x86_64", "AppRun");
 
-            Assert.Equal(expectedAppRun, (string)firstPath);
-            Assert.Equal(expectedAppRun, (string)secondPath);
+            Assert.Equal(expectedAppRun, firstPath);
+            Assert.Equal(expectedAppRun, secondPath);
             Assert.Equal(
                 ["https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"],
                 build.DownloadUrls);
             Assert.Equal([downloadedPath], build.DownloadDestinations);
             Assert.Equal([$"'{downloadedPath}' --appimage-extract"], build.ShellCommands);
-            Assert.Equal([cacheDirectory], build.ShellWorkingDirectories);
-            Assert.Equal(
-                ["appimagetool-x86_64.AppImage", "AppRun", "AppRun"],
-                build.LinuxExecutableFileNames);
+            var extractionDirectory = Assert.Single(build.ShellWorkingDirectories);
+            Assert.Equal(cacheDirectory, Path.GetDirectoryName(extractionDirectory));
+            Assert.StartsWith("extract-", Path.GetFileName(extractionDirectory), StringComparison.Ordinal);
+            Assert.False(Directory.Exists(extractionDirectory));
             Assert.Equal(["linux-warning"], build.Calls);
         }
         finally
@@ -1253,10 +1273,10 @@ public class PublishPipelineTests
         var buildCommand = build.InvokeCreateAppImageBuildCommand(
             "x86_64", toolPath, appDirPath, outputPath);
 
-        var expectedDownloadedPath = $"'{((string)downloadedPath).Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
-        var expectedToolPath = $"'{((string)toolPath).Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
-        var expectedAppDirPath = $"'{((string)appDirPath).Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
-        var expectedOutputPath = $"'{((string)outputPath).Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
+        var expectedDownloadedPath = $"'{downloadedPath.ToString().Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
+        var expectedToolPath = $"'{toolPath.ToString().Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
+        var expectedAppDirPath = $"'{appDirPath.ToString().Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
+        var expectedOutputPath = $"'{outputPath.ToString().Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
         Assert.Equal($"{expectedDownloadedPath} --appimage-extract", extractionCommand);
         Assert.Equal(
             $"ARCH=x86_64 {expectedToolPath} {expectedAppDirPath} {expectedOutputPath}",
@@ -1378,13 +1398,13 @@ public class PublishPipelineTests
                 stagingPath, "usr", "bin", "runtime.json")));
             Assert.Equal("linux-x64", stagedManifest.RootElement.GetProperty("Runtime").GetString());
             Assert.True(stagedManifest.RootElement.GetProperty("IsBundle").GetBoolean());
-            Assert.Equal("AppImage", stagedManifest.RootElement.GetProperty("BundleType").GetString());
+            Assert.Equal(nameof(ApplicationBundleType.LinuxAppImage),
+                stagedManifest.RootElement.GetProperty("BundleType").GetString());
             using var rawManifest = JsonDocument.Parse(
                 File.ReadAllText(Path.Combine(publishDirectory, "runtime.json")));
             Assert.False(rawManifest.RootElement.GetProperty("IsBundle").GetBoolean());
             Assert.Equal("configured-bin", build.LinuxAppBundleOptions.ExecutableName);
             Assert.Equal("configured-icon", build.LinuxAppBundleOptions.IconName);
-            Assert.Equal(["AppRun", "configured-bin"], build.LinuxExecutableFileNames);
         }
         finally
         {
@@ -1594,9 +1614,6 @@ public class PublishPipelineTests
             Assert.False(File.Exists(temporaryOutputPath));
             Assert.True(File.Exists(Path.Combine(cacheDirectory, "appimagetool-x86_64.AppImage")));
             Assert.True(File.Exists(extractedAppRun));
-            Assert.Equal(2, build.LinuxExecutableFileNames.FindAll(fileName => fileName == "AppRun").Count);
-            Assert.Contains("appimagetool-x86_64.AppImage", build.LinuxExecutableFileNames);
-            Assert.Contains(Path.GetFileName(temporaryOutputPath), build.LinuxExecutableFileNames);
         }
         finally
         {
@@ -1902,10 +1919,10 @@ public class PublishPipelineTests
         var secondPath = build.InvokeCreateTemporaryAppImageOutputPath(outputPath);
 
         Assert.NotEqual(firstPath, secondPath);
-        Assert.Equal(rootDirectory, Path.GetDirectoryName((string)firstPath));
-        Assert.Equal(rootDirectory, Path.GetDirectoryName((string)secondPath));
-        Assert.StartsWith(".TestApp.AppImage.", Path.GetFileName((string)firstPath), StringComparison.Ordinal);
-        Assert.EndsWith(".tmp", Path.GetFileName((string)firstPath), StringComparison.Ordinal);
+        Assert.Equal(rootDirectory, Path.GetDirectoryName(firstPath));
+        Assert.Equal(rootDirectory, Path.GetDirectoryName(secondPath));
+        Assert.StartsWith(".TestApp.AppImage.", Path.GetFileName(firstPath), StringComparison.Ordinal);
+        Assert.EndsWith(".tmp", Path.GetFileName(firstPath), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1927,7 +1944,7 @@ public class PublishPipelineTests
         {
             var appRun = build.InvokePrepareAppImageTool();
 
-            Assert.Equal(Path.Combine(rootDirectory, "squashfs-root-aarch64", "AppRun"), (string)appRun);
+            Assert.Equal(Path.Combine(rootDirectory, "squashfs-root-aarch64", "AppRun"), appRun);
             Assert.Equal(
                 ["https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage"],
                 build.DownloadUrls);
@@ -1960,14 +1977,13 @@ public class PublishPipelineTests
         {
             var appRun = build.InvokePrepareAppImageTool();
 
-            Assert.Equal(Path.Combine(extractedDirectory, "AppRun"), (string)appRun);
-            Assert.True(File.Exists((string)appRun));
+            Assert.Equal(Path.Combine(extractedDirectory, "AppRun"), appRun);
+            Assert.True(File.Exists(appRun));
             Assert.False(File.Exists(Path.Combine(extractedDirectory, "stale.txt")));
             Assert.Empty(build.DownloadUrls);
             Assert.Equal(
                 [$"'{Path.Combine(rootDirectory, "appimagetool-x86_64.AppImage")}' --appimage-extract"],
                 build.ShellCommands);
-            Assert.Equal(["appimagetool-x86_64.AppImage", "AppRun"], build.LinuxExecutableFileNames);
         }
         finally
         {
@@ -1996,19 +2012,17 @@ public class PublishPipelineTests
         {
             var exception = Assert.Throws<FileNotFoundException>(() => build.InvokePrepareAppImageTool());
 
-            Assert.Equal(Path.Combine(extractionOutput, "AppRun"), exception.FileName);
+            var failedExtraction = Assert.Single(build.ShellWorkingDirectories);
+            Assert.Equal(Path.Combine(failedExtraction, "squashfs-root", "AppRun"), exception.FileName);
             Assert.False(Directory.Exists(extractedDirectory));
-            Assert.False(Directory.Exists(extractionOutput));
+            Assert.False(Directory.Exists(failedExtraction));
 
             build.CreateExtractedAppRun = true;
             var appRun = build.InvokePrepareAppImageTool();
 
-            Assert.Equal(Path.Combine(extractedDirectory, "AppRun"), (string)appRun);
+            Assert.Equal(Path.Combine(extractedDirectory, "AppRun"), appRun);
             Assert.Single(build.DownloadUrls);
             Assert.Equal(2, build.ShellCommands.Count);
-            Assert.Equal(
-                ["appimagetool-x86_64.AppImage", "appimagetool-x86_64.AppImage", "AppRun"],
-                build.LinuxExecutableFileNames);
         }
         finally
         {
@@ -2025,11 +2039,9 @@ public class PublishPipelineTests
         var rootDirectory = Path.Combine(Path.GetTempPath(), $"updatum-{Guid.NewGuid():N}");
         var downloadedPath = Path.Combine(rootDirectory, "appimagetool-x86_64.AppImage");
         var extractedPath = Path.Combine(rootDirectory, "squashfs-root-x86_64");
-        var extractionOutput = Path.Combine(rootDirectory, "squashfs-root");
         Directory.CreateDirectory(downloadedPath);
         File.WriteAllText(Path.Combine(downloadedPath, "stale.txt"), "stale");
         File.WriteAllText(extractedPath, "invalid-cache-file");
-        File.WriteAllText(extractionOutput, "invalid-extraction-file");
         var build = new TestBuild
         {
             TestAppImageToolCacheDirectory = (AbsolutePath)rootDirectory,
@@ -2042,10 +2054,10 @@ public class PublishPipelineTests
         {
             var appRun = build.InvokePrepareAppImageTool();
 
-            Assert.Equal(Path.Combine(extractedPath, "AppRun"), (string)appRun);
+            Assert.Equal(Path.Combine(extractedPath, "AppRun"), appRun);
             Assert.True(File.Exists(downloadedPath));
             Assert.False(Directory.Exists(downloadedPath));
-            Assert.True(File.Exists((string)appRun));
+            Assert.True(File.Exists(appRun));
             Assert.Single(build.DownloadUrls);
             Assert.Single(build.ShellCommands);
         }
@@ -2076,7 +2088,6 @@ public class PublishPipelineTests
 
             Assert.False(File.Exists(Path.Combine(rootDirectory, "appimagetool-x86_64.AppImage")));
             Assert.Empty(build.ShellCommands);
-            Assert.Empty(build.LinuxExecutableFileNames);
         }
         finally
         {
@@ -2088,7 +2099,7 @@ public class PublishPipelineTests
     /// Verifies the base Linux permission boundary sets all Unix execute bits.
     /// </summary>
     [Fact]
-    public void SetLinuxExecutable_UnixFile_SetsExecuteBits()
+    public void SetUnixExecutable_LinuxFile_SetsExecuteBits()
     {
         if (OperatingSystem.IsWindows())
             return;
@@ -2100,12 +2111,7 @@ public class PublishPipelineTests
 
         try
         {
-            var build = new TestBuild
-            {
-                UseBaseLinuxExecutable = true
-            };
-
-            build.InvokeSetLinuxExecutable((AbsolutePath)executablePath);
+            UnixSystem.SetUnixExecutable((AbsolutePath)executablePath);
 
             const UnixFileMode executeBits = UnixFileMode.UserExecute |
                                              UnixFileMode.GroupExecute |
@@ -2141,8 +2147,7 @@ public class PublishPipelineTests
         {
             var build = new TestBuild
             {
-                TestLinuxIconFile = (AbsolutePath)iconPath,
-                UseBaseLinuxExecutable = true
+                TestLinuxIconFile = (AbsolutePath)iconPath
             };
             ConfigureLinuxOptions(build);
 
@@ -2312,11 +2317,11 @@ public class PublishPipelineTests
             ConfigureMacOSOptions(build, "ConfiguredExecutable");
 
             var appPath = build.InvokeCreateMacOSAppLayout((AbsolutePath)stagingPath);
-            var contentsPath = Path.Combine((string)appPath, "Contents");
+            var contentsPath = Path.Combine(appPath, "Contents");
             var infoPList = File.ReadAllText(Path.Combine(contentsPath, "Info.plist"));
             var entitlements = File.ReadAllText(Path.Combine(contentsPath, "TestApp.entitlements"));
 
-            Assert.Equal(Path.Combine(stagingPath, "TestApp.app"), (string)appPath);
+            Assert.Equal(Path.Combine(stagingPath, "TestApp.app"), appPath);
             Assert.True(Directory.Exists(Path.Combine(contentsPath, "MacOS")));
             Assert.Equal("icon", File.ReadAllText(Path.Combine(contentsPath, "Resources", "Configured.icns")));
             Assert.Contains("<string>pt</string>", infoPList, StringComparison.Ordinal);
@@ -2353,7 +2358,7 @@ public class PublishPipelineTests
 
             var appPath = build.InvokeCreateMacOSAppLayout((AbsolutePath)stagingPath);
 
-            Assert.True(File.Exists(Path.Combine((string)appPath, "Contents", "Info.plist")));
+            Assert.True(File.Exists(Path.Combine(appPath, "Contents", "Info.plist")));
             Assert.Equal("TestApp", build.MacAppBundleOptions.ExecutableName);
         }
         finally
@@ -2390,7 +2395,7 @@ public class PublishPipelineTests
 
             using var archive = ZipFile.OpenRead($"{publishDirectory}.zip");
             Assert.Equal("osx-x64", ReadManifestRuntime(archive,
-                "TestApp.app/Contents/MacOS/runtime.json", "App"));
+                "TestApp.app/Contents/MacOS/runtime.json", nameof(ApplicationBundleType.MacOSAppBundle)));
             Assert.Equal("osx-x64", ReadArchiveEntry(archive,
                 "TestApp.app/Contents/MacOS/raw.txt"));
             Assert.Equal("payload", ReadArchiveEntry(archive,
@@ -2484,9 +2489,11 @@ public class PublishPipelineTests
             var archivePath = Path.Combine(rootDirectory, "TestApp_osx-multiarch_v1.2.3.zip");
             using var archive = ZipFile.OpenRead(archivePath);
             Assert.Equal("osx-multiarch", ReadManifestRuntime(archive,
-                "TestApp.app/Contents/MacOS/intel-runtime/runtime.json", "App"));
+                "TestApp.app/Contents/MacOS/intel-runtime/runtime.json",
+                nameof(ApplicationBundleType.MacOSAppBundle)));
             Assert.Equal("osx-multiarch", ReadManifestRuntime(archive,
-                "TestApp.app/Contents/MacOS/apple-runtime/runtime.json", "App"));
+                "TestApp.app/Contents/MacOS/apple-runtime/runtime.json",
+                nameof(ApplicationBundleType.MacOSAppBundle)));
             Assert.Equal("OSX-X64", ReadArchiveEntry(archive,
                 "TestApp.app/Contents/MacOS/intel-runtime/raw.txt"));
             Assert.Equal("OsX-ArM64", ReadArchiveEntry(archive,
@@ -2504,7 +2511,6 @@ public class PublishPipelineTests
             Assert.DoesNotContain("\r", launcher, StringComparison.Ordinal);
             Assert.Contains("ConfiguredExecutable", ReadArchiveEntry(archive,
                 "TestApp.app/Contents/Info.plist"), StringComparison.Ordinal);
-            Assert.Equal(["ConfiguredExecutable"], build.ExecutableFileNames);
             Assert.Single(build.SignedAppPaths);
             Assert.False(Directory.Exists(build.SignedAppPaths[0]));
         }
@@ -2712,7 +2718,7 @@ public class PublishPipelineTests
     /// Verifies the base Unix executable boundary sets execute bits that are retained in ZIP metadata.
     /// </summary>
     [Fact]
-    public void SetMacOSExecutable_UnixFile_SetsExecuteBitsAndZipMetadata()
+    public void SetUnixExecutable_MacOSFile_SetsExecuteBitsAndZipMetadata()
     {
         if (OperatingSystem.IsWindows())
             return;
@@ -2726,12 +2732,7 @@ public class PublishPipelineTests
 
         try
         {
-            var build = new TestBuild
-            {
-                UseBaseMacOSExecutable = true
-            };
-
-            build.InvokeSetMacOSExecutable((AbsolutePath)executablePath);
+            UnixSystem.SetUnixExecutable((AbsolutePath)executablePath);
 
             const UnixFileMode executeBits = UnixFileMode.UserExecute |
                                              UnixFileMode.GroupExecute |
@@ -2925,11 +2926,7 @@ public class PublishPipelineTests
 
         internal readonly List<string> DownloadUrls = [];
 
-        internal readonly List<string> ExecutableFileNames = [];
-
         internal readonly List<string> InstallerSourcePaths = [];
-
-        internal readonly List<string> LinuxExecutableFileNames = [];
 
         internal readonly List<string> PortableZipPayloadPaths = [];
 
@@ -3040,11 +3037,7 @@ public class PublishPipelineTests
 
         internal string AppDirPathDuringBuild { get; private set; } = string.Empty;
 
-        internal bool UseBaseLinuxExecutable { get; set; }
-
         internal Architecture TestHostArchitecture { get; set; } = Architecture.X64;
-
-        internal bool UseBaseMacOSExecutable { get; set; }
 
         internal IReadOnlyCollection<Project> TestInstallerProjects { get; set; } = [];
 
@@ -3149,7 +3142,7 @@ public class PublishPipelineTests
 
         internal bool InvokeIsInstallerProject(Project project)
         {
-            return IsInstallerProject(project);
+            return IsWindowsInstallerProject(project);
         }
 
         internal void InvokeExecutePublish()
@@ -3175,6 +3168,11 @@ public class PublishPipelineTests
         internal void InvokeCreatePortableZip(PublishRidContext context)
         {
             CreatePortableZip(context);
+        }
+
+        internal bool InvokeShouldCreatePortableZip(string runtimeIdentifier)
+        {
+            return ShouldCreatePortableZip(runtimeIdentifier);
         }
 
         internal AbsolutePath InvokeCreateMacOSAppLayout(AbsolutePath stagingPath)
@@ -3224,16 +3222,6 @@ public class PublishPipelineTests
             return CreateTemporaryAppImageOutputPath(outputPath);
         }
 
-        internal void InvokeSetLinuxExecutable(AbsolutePath executablePath)
-        {
-            SetLinuxExecutable(executablePath);
-        }
-
-        internal void InvokeSetMacOSExecutable(AbsolutePath executablePath)
-        {
-            SetMacOSExecutable(executablePath);
-        }
-
         internal void ConfigurePublishTarget(
             string[] runtimeIdentifiers,
             bool discardNonBundles,
@@ -3269,7 +3257,7 @@ public class PublishPipelineTests
         protected override void DeleteFileSystemEntry(AbsolutePath path)
         {
             if (UseConfiguredTemporaryAppImageOutputPath &&
-                ((string)path).Equals((string)TestTemporaryAppImageOutputPath, StringComparison.Ordinal))
+                path.ToString().Equals(TestTemporaryAppImageOutputPath, StringComparison.Ordinal))
             {
                 TemporaryOutputCleanupCalls++;
                 if (ThrowOnFinalTemporaryOutputCleanup && TemporaryOutputCleanupCalls == 2)
@@ -3277,7 +3265,7 @@ public class PublishPipelineTests
             }
 
             if (!string.IsNullOrEmpty(AppDirPathDuringBuild) &&
-                ((string)path).Equals(AppDirPathDuringBuild, StringComparison.Ordinal))
+                path.ToString().Equals(AppDirPathDuringBuild, StringComparison.Ordinal))
             {
                 AppDirCleanupAttempted = true;
             }
@@ -3338,20 +3326,20 @@ public class PublishPipelineTests
                 return;
             }
 
-            Assert.False(File.Exists(Path.Combine((string)context.PublishPath, "stale.txt")));
-            Directory.CreateDirectory((string)context.PublishPath);
-            File.WriteAllText(Path.Combine((string)context.PublishPath, "raw.txt"), context.RuntimeIdentifier);
+            Assert.False(File.Exists(Path.Combine(context.PublishPath, "stale.txt")));
+            Directory.CreateDirectory(context.PublishPath);
+            File.WriteAllText(Path.Combine(context.PublishPath, "raw.txt"), context.RuntimeIdentifier);
             if (PublishBundles.HasFlag(PublishBundleTypes.DotNetSingleExecutable))
             {
-                var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
+                var runtime = PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier);
                 var executableName = runtime.Family is PublishRidFamily.Windows
                     ? $"{SoftwareName}.exe"
                     : SoftwareName;
-                File.WriteAllText(Path.Combine((string)context.PublishPath, executableName),
+                File.WriteAllText(Path.Combine(context.PublishPath, executableName),
                     context.RuntimeIdentifier);
             }
 
-            Calls.Add($"publish:{context.RuntimeIdentifier}:{Path.GetFileName((string)context.PublishPath)}");
+            Calls.Add($"publish:{context.RuntimeIdentifier}:{Path.GetFileName(context.PublishPath)}");
         }
 
         protected override void CreateBundles(IReadOnlyCollection<PublishRidContext> contexts)
@@ -3372,8 +3360,8 @@ public class PublishPipelineTests
             if (RecordPortableZip)
             {
                 Calls.Add($"zip:{context.RuntimeIdentifier}");
-                PortableZipPayloadPaths.Add((string)context.PublishPath);
-                BundleOutputPaths.Add((string)context.BundleOutputPath);
+                PortableZipPayloadPaths.Add(context.PublishPath);
+                BundleOutputPaths.Add(context.BundleOutputPath);
                 return;
             }
 
@@ -3385,7 +3373,7 @@ public class PublishPipelineTests
             if (RecordMacOSApp)
             {
                 Calls.Add($"mac:{context.RuntimeIdentifier}");
-                BundleOutputPaths.Add((string)context.BundleOutputPath);
+                BundleOutputPaths.Add(context.BundleOutputPath);
                 return;
             }
 
@@ -3451,9 +3439,9 @@ public class PublishPipelineTests
         protected override void DownloadFile(string url, AbsolutePath destination)
         {
             DownloadUrls.Add(url);
-            DownloadDestinations.Add((string)destination);
+            DownloadDestinations.Add(destination);
             if (CreateDownloadedFile)
-                File.WriteAllText((string)destination, "appimagetool");
+                File.WriteAllText(destination, "appimagetool");
             if (ThrowAfterDownload)
                 throw new InvalidOperationException("Download failed.");
         }
@@ -3461,69 +3449,48 @@ public class PublishPipelineTests
         protected override void ExecuteShell(string command, AbsolutePath workingDirectory)
         {
             ShellCommands.Add(command);
-            ShellWorkingDirectories.Add((string)workingDirectory);
+            ShellWorkingDirectories.Add(workingDirectory);
             if (command.EndsWith(" --appimage-extract", StringComparison.Ordinal) &&
                 (CreateExtractionDirectory || CreateExtractedAppRun))
             {
                 var extractedPath = workingDirectory / "squashfs-root";
-                Directory.CreateDirectory((string)extractedPath);
+                Directory.CreateDirectory(extractedPath);
                 if (CreateExtractedAppRun)
-                    File.WriteAllText((string)(extractedPath / "AppRun"), "appimagetool");
+                    File.WriteAllText(extractedPath / "AppRun", "appimagetool");
             }
 
             if (command.StartsWith("ARCH=", StringComparison.Ordinal))
             {
-                AppDirPathDuringBuild = (string)workingDirectory;
-                AppDirExistedDuringBuild = Directory.Exists((string)workingDirectory);
-                OutputExistedWhenBuildStarted = File.Exists((string)TestAppImageOutputPath);
-                FinalOutputExistedWhenBuildStarted = File.Exists((string)TestFinalAppImageOutputPath);
+                AppDirPathDuringBuild = workingDirectory;
+                AppDirExistedDuringBuild = Directory.Exists(workingDirectory);
+                OutputExistedWhenBuildStarted = File.Exists(TestAppImageOutputPath);
+                FinalOutputExistedWhenBuildStarted = File.Exists(TestFinalAppImageOutputPath);
                 if (CreateAppImageOutput)
-                    File.WriteAllText((string)TestAppImageOutputPath, "image");
+                    File.WriteAllText(TestAppImageOutputPath, "image");
                 if (CreateAppImageOutputDirectory)
-                    Directory.CreateDirectory((string)TestAppImageOutputPath);
+                    Directory.CreateDirectory(TestAppImageOutputPath);
                 if (ThrowAfterAppImageBuild)
                     throw new InvalidOperationException("AppImage build failed.");
             }
         }
 
-        protected override void SetLinuxExecutable(AbsolutePath executablePath)
-        {
-            if (UseBaseLinuxExecutable)
-            {
-                base.SetLinuxExecutable(executablePath);
-                return;
-            }
-
-            LinuxExecutableFileNames.Add(Path.GetFileName((string)executablePath));
-        }
-
         protected override void SignMacOSApp(AbsolutePath appPath)
         {
-            SignedAppPaths.Add((string)appPath);
-        }
-
-        protected override void SetMacOSExecutable(AbsolutePath executablePath)
-        {
-            if (UseBaseMacOSExecutable)
-            {
-                base.SetMacOSExecutable(executablePath);
-                return;
-            }
-
-            ExecutableFileNames.Add(Path.GetFileName((string)executablePath));
+            SignedAppPaths.Add(appPath);
         }
 
         protected override void BuildWindowsInstaller(Project project, PublishRidContext context,
             AbsolutePath sourcePath, string platform)
         {
             Calls.Add($"installer:{context.RuntimeIdentifier}:{platform}");
-            InstallerSourcePaths.Add((string)sourcePath);
+            InstallerSourcePaths.Add(sourcePath);
 
             using var manifest = JsonDocument.Parse(
-                File.ReadAllText(Path.Combine((string)sourcePath, TestBuildRuntimeCacheFileName)));
+                File.ReadAllText(Path.Combine(sourcePath, TestBuildRuntimeCacheFileName)));
             Assert.Equal(context.RuntimeIdentifier, manifest.RootElement.GetProperty("Runtime").GetString());
             Assert.True(manifest.RootElement.GetProperty("IsBundle").GetBoolean());
-            Assert.Equal("Installer", manifest.RootElement.GetProperty("BundleType").GetString());
+            Assert.Equal(nameof(ApplicationBundleType.WindowsInstaller),
+                manifest.RootElement.GetProperty("BundleType").GetString());
         }
 
         protected override void ExecuteDotNetPublish(DotNetPublishSettings settings)

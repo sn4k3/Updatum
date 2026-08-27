@@ -12,6 +12,36 @@ namespace Updatum.Fallout;
 public partial class UpdatumBuild
 {
     /// <summary>
+    /// Gets a value indicating whether FUSE 2 is available on the current Linux host.
+    /// </summary>
+    protected virtual bool IsFuseAvailable => LinuxSystem.IsFuseAvailable;
+
+    /// <summary>
+    /// Gets the current process architecture used to select appimagetool.
+    /// </summary>
+    protected virtual Architecture HostArchitecture => RuntimeInformation.ProcessArchitecture;
+
+    /// <summary>
+    /// Gets the persistent appimagetool download and extraction cache directory.
+    /// </summary>
+    protected virtual AbsolutePath AppImageToolCacheDirectory => TemporaryDirectory / "appimagetool";
+
+    /// <summary>
+    /// Gets the parent directory for isolated AppDir staging directories.
+    /// </summary>
+    protected virtual AbsolutePath AppImageStagingDirectory => PublishStagingDirectory;
+
+    /// <summary>
+    /// Composes the shell command that extracts one downloaded appimagetool AppImage.
+    /// </summary>
+    /// <param name="downloadedPath">The downloaded AppImage path.</param>
+    /// <returns>The shell-safe extraction command.</returns>
+    protected virtual string CreateAppImageToolExtractionCommand(AbsolutePath downloadedPath)
+    {
+        return $"{AppBundleUtilities.QuoteShell(downloadedPath)} --appimage-extract";
+    }
+
+    /// <summary>
     /// Selects and creates the configured Linux AppImage bundles.
     /// </summary>
     /// <param name="contexts">The successfully published runtime contexts.</param>
@@ -19,7 +49,7 @@ public partial class UpdatumBuild
     {
         var linuxContexts = contexts
             .Select(context => (Context: context,
-                Runtime: PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier)))
+                Runtime: PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier)))
             .Where(item => item.Runtime.Family is PublishRidFamily.Linux)
             .ToArray();
         if (linuxContexts.Length == 0)
@@ -60,7 +90,7 @@ public partial class UpdatumBuild
             {
                 throw new FileNotFoundException(
                     $"Temporary AppImage output '{temporaryOutputPath}' does not exist.",
-                    (string)temporaryOutputPath);
+                    temporaryOutputPath);
             }
 
             UnixSystem.SetUnixExecutable(temporaryOutputPath);
@@ -112,7 +142,7 @@ public partial class UpdatumBuild
         {
             throw new FileNotFoundException(
                 $"The configured Linux application icon '{linuxIconFile}' does not exist.",
-                (string)linuxIconFile);
+                linuxIconFile);
         }
 
         var publishedExecutable = context.PublishPath / options.ExecutableName!;
@@ -120,7 +150,7 @@ public partial class UpdatumBuild
         {
             throw new FileNotFoundException(
                 $"Published executable '{publishedExecutable}' does not exist for '{context.RuntimeIdentifier}'.",
-                (string)publishedExecutable);
+                publishedExecutable);
         }
 
         var usrBinPath = appDirPath / "usr" / "bin";
@@ -159,29 +189,15 @@ public partial class UpdatumBuild
 
     private static void ResolveLinuxPathOptions(LinuxAppBundleOptions options)
     {
-        options.ExecutableName = ValidateLinuxPathName(
+        options.ExecutableName = PublishUtilities.ValidatePathLeafName(
             options.ExecutableName ?? options.ProductName,
             $"{nameof(LinuxAppBundleOptions)}.{nameof(LinuxAppBundleOptions.ExecutableName)}");
-        options.IconName = ValidateLinuxPathName(
+        options.IconName = PublishUtilities.ValidatePathLeafName(
             options.IconName ?? options.ProductName,
             $"{nameof(LinuxAppBundleOptions)}.{nameof(LinuxAppBundleOptions.IconName)}");
-        options.ApplicationId = ValidateLinuxPathName(
+        options.ApplicationId = PublishUtilities.ValidatePathLeafName(
             options.ApplicationId,
             $"{nameof(LinuxAppBundleOptions)}.{nameof(LinuxAppBundleOptions.ApplicationId)}");
-    }
-
-    private static string ValidateLinuxPathName(string? value, string optionName)
-    {
-        if (string.IsNullOrWhiteSpace(value) ||
-            Path.IsPathRooted(value) ||
-            value.Contains('/') ||
-            value.Contains('\\') ||
-            value is "." or "..")
-        {
-            throw new InvalidOperationException($"{optionName} must be a nonblank simple leaf name.");
-        }
-
-        return value;
     }
 
     /// <summary>
@@ -241,12 +257,14 @@ public partial class UpdatumBuild
         if (!IsFuseAvailable)
             WarnFuseUnavailable();
 
-        var extractionOutput = cacheDirectory / "squashfs-root";
+        var extractionDirectory = cacheDirectory / $"extract-{Guid.NewGuid():N}";
+        var extractionOutput = extractionDirectory / "squashfs-root";
         var extractionAppRun = extractionOutput / "AppRun";
-        DeleteFileSystemEntry(extractionOutput);
+        DeleteFileSystemEntry(extractionDirectory);
+        extractionDirectory.CreateDirectory();
         try
         {
-            ExecuteShell(CreateAppImageToolExtractionCommand(downloadedPath), cacheDirectory);
+            ExecuteShell(CreateAppImageToolExtractionCommand(downloadedPath), extractionDirectory);
             if (!extractionOutput.DirectoryExists())
             {
                 throw new DirectoryNotFoundException(
@@ -257,14 +275,15 @@ public partial class UpdatumBuild
             {
                 throw new FileNotFoundException(
                     $"Extracted appimagetool executable '{extractionAppRun}' does not exist.",
-                    (string)extractionAppRun);
+                    extractionAppRun);
             }
 
+            DeleteFileSystemEntry(extractedPath);
             extractionOutput.Move(extractedPath);
         }
         finally
         {
-            DeleteFileSystemEntry(extractionOutput);
+            DeleteFileSystemEntry(extractionDirectory);
         }
 
         UnixSystem.SetUnixExecutable(extractedAppRun);

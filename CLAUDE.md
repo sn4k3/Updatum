@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -33,7 +33,7 @@ Requires .NET SDK 8.0+. Multi-targets net8.0/net9.0/net10.0 for the `Updatum` li
 ./build.cmd Print                 # dumps resolved build variables for debugging
 ```
 
-`Updatum.Build/Build.cs` is the thin, repo-specific `Build : UpdatumBuild` entry point (`Updatum.Build.csproj`). `Updatum.Fallout` is the reusable class library holding the actual Updatum-specific build/publish/bundle logic (`UpdatumBuild` partial class, split by platform: `UpdatumBuild.cs`, `.Windows.cs`, `.Linux.cs`, `.MacOS.cs`, `.Publish.cs`). `Updatum.Fallout.Tests` is an xUnit v3 test project covering that logic (`InternalsVisibleTo` from `Updatum.Fallout`). Build state/logs land in `.fallout/` (gitignored working directory, analogous to Nuke's `.nuke/`).
+`Updatum.Build/Build.cs` is the thin, repo-specific `Build : UpdatumBuild` entry point (`Updatum.Build.csproj`). `Updatum.Fallout` is the reusable class library holding the actual Updatum-specific build/publish/bundle logic (`UpdatumBuild` partial class, split by platform: `UpdatumBuild.cs`, `.Windows.cs`, `.Linux.cs`, `.MacOS.cs`, `.Publish.cs`). `Updatum.Fallout.Tests` is an xUnit v3 test project covering that logic (`InternalsVisibleTo` from `Updatum.Fallout`). It runs on Microsoft.Testing.Platform rather than VSTest, which the .NET 10 SDK removed: `global.json` carries the `"test": { "runner": "Microsoft.Testing.Platform" }` opt-in and the project references only `xunit.v3` (no `Microsoft.NET.Test.Sdk`, no VSTest adapter). Build state/logs land in `.fallout/` (gitignored working directory, analogous to Nuke's `.nuke/`).
 
 Key `UpdatumBuild` targets: `Restore`, `Compile`, `Run`, `Publish`, `Clean`, `Print`. `Publish` publishes every configured RID (`RIds` parameter) and, unless `--publish-no-bundles`, creates bundles per `PublishBundles` flags (`DotNetSingleExecutable` zip, `WindowsInstaller`, `MacOSAppBundle`, `LinuxAppImage`) via `CreateBundles`/`CreatePortableZip`/platform-specific creators.
 

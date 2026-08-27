@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
@@ -38,7 +38,7 @@ public record BuildRuntime
     /// <summary>
     /// Gets or sets the runtime identifier for the build.
     /// </summary>
-    public required string Runtime { get; init; } = string.Empty;
+    public required string Runtime { get; init; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the build is a bundle.
@@ -64,5 +64,5 @@ public record BuildRuntime
     /// <summary>
     /// Gets or sets the application version used for the build.
     /// </summary>
-    public required string BuildVersion { get; init; } = string.Empty;
+    public required string BuildVersion { get; init; }
 }

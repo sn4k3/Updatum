@@ -12,7 +12,8 @@ using Fallout.Solutions;
 namespace Updatum.Fallout;
 
 /// <summary>
-///
+/// Provides the Updatum build pipeline: solution and project discovery, software metadata resolved from
+/// MSBuild properties, and the restore/compile/run/publish targets together with their platform bundles.
 /// </summary>
 public partial class UpdatumBuild : FalloutBuild
 {
@@ -35,21 +36,22 @@ public partial class UpdatumBuild : FalloutBuild
     public BuildConfiguration Configuration { get; protected set; } = BuildConfiguration.Release;
 
     /// <summary>
-    ///
+    /// Gets a value indicating whether every architecture of a platform is combined into one bundle, so the
+    /// resulting application selects the matching architecture at run time.
     /// </summary>
     [Parameter(
         "When publish set this variable(true) to bundle all arch in a single bundle, eg: x64 and arm64 together, app will then run the required arch. Default: False")]
     public bool PublishMultiArch { get; protected set; }
 
     /// <summary>
-    /// Gets a value indicating whether publish output is bundled.
+    /// Gets a value indicating whether bundle creation (zip, apps, installers) is skipped after publishing.
     /// </summary>
     [Parameter(
         "When publish set this variable(true) to not create the bundles (zip, apps, installers). Default: False")]
     public bool PublishNoBundles { get; protected set; }
 
     /// <summary>
-    /// Gets a value indicating whether non-bundle publish output is removed.
+    /// Gets a value indicating whether the raw compilation folders are removed once the bundles are created.
     /// </summary>
     [Parameter(
         "When publish set this variable(true) to keep only the bundles (zip, apps, installers), compilation folders will be removed. Default: False")]
@@ -126,6 +128,10 @@ public partial class UpdatumBuild : FalloutBuild
     /// <summary>
     /// Gets the main project of the solution, excluding projects with invalid names, see: <see cref="ExcludedProjectNameTokens"/>
     /// </summary>
+    /// <remarks>
+    /// The <em>last</em> runnable, non-excluded project in solution order wins, so the result depends on how the
+    /// solution file orders its projects. Override this property when the solution holds more than one candidate.
+    /// </remarks>
     /// <exception cref="Exception">Thrown when no valid runnable project is found in the solution that is not excluded by name.</exception>
     [field: AllowNull]
     [field: MaybeNull]
@@ -163,7 +169,7 @@ public partial class UpdatumBuild : FalloutBuild
     public virtual AbsolutePath PublishDirectory => ArtifactsDirectory / "publish";
 
     /// <summary>
-    ///
+    /// Gets the directory holding the packaging media (application icons) used by the bundle creators.
     /// </summary>
     public virtual AbsolutePath MediaDirectory => RootDirectory / "media";
 
@@ -314,11 +320,11 @@ public partial class UpdatumBuild : FalloutBuild
         {
             if (field is null)
             {
-                field ??= GetMainProjectProperty("Version")!;
-            }
-            else
-            {
-                if (field.EndsWith("-dev")) field = field[..^4];
+                var version = GetMainProjectProperty("Version");
+                if (version is not null && version.EndsWith("-dev", StringComparison.Ordinal))
+                    version = version[..^4];
+
+                field = version!;
             }
 
             ThrowIfMissingProperty(field);
@@ -391,6 +397,8 @@ public partial class UpdatumBuild : FalloutBuild
     /// <summary>
     /// Gets the software package tags as a list of individual tags.
     /// </summary>
+    [field: AllowNull]
+    [field: MaybeNull]
     public string[] SoftwarePackageTagsList =>
         field ??= SoftwarePackageTags.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
             .Select(tag => tag.Trim())
@@ -429,17 +437,45 @@ public partial class UpdatumBuild : FalloutBuild
     [field: MaybeNull]
     public MacAppBundleOptions MacAppBundleOptions
     {
-        get => field ??= new MacAppBundleOptions(this);
+        get => field ??= CreateMacAppBundleOptions();
         set;
+    }
+
+    /// <summary>
+    /// Creates the default macOS application bundle options.
+    /// </summary>
+    /// <remarks>
+    /// Resolved lazily on first use so derived builds can customize the options without forcing MSBuild
+    /// project evaluation from their constructor.
+    /// </remarks>
+    /// <returns>The default macOS application bundle options.</returns>
+    protected virtual MacAppBundleOptions CreateMacAppBundleOptions()
+    {
+        return new MacAppBundleOptions(this);
     }
 
     /// <summary>
     /// Gets or sets the options used to create Linux application bundles.
     /// </summary>
+    [field: AllowNull]
+    [field: MaybeNull]
     public LinuxAppBundleOptions LinuxAppBundleOptions
     {
-        get => field ??= new LinuxAppBundleOptions(this);
+        get => field ??= CreateLinuxAppBundleOptions();
         set;
+    }
+
+    /// <summary>
+    /// Creates the default Linux application bundle options.
+    /// </summary>
+    /// <remarks>
+    /// Resolved lazily on first use so derived builds can customize the options without forcing MSBuild
+    /// project evaluation from their constructor.
+    /// </remarks>
+    /// <returns>The default Linux application bundle options.</returns>
+    protected virtual LinuxAppBundleOptions CreateLinuxAppBundleOptions()
+    {
+        return new LinuxAppBundleOptions(this);
     }
 
     /// <summary>
@@ -477,9 +513,10 @@ public partial class UpdatumBuild : FalloutBuild
             {
                 variables[property.Name] = FormatPrintValue(property.GetValue(this));
             }
-            catch (TargetInvocationException exception)
+            catch (Exception exception)
             {
-                variables[property.Name] = $"<error: {exception.InnerException?.Message ?? exception.Message}>";
+                var failure = (exception as TargetInvocationException)?.InnerException ?? exception;
+                variables[property.Name] = $"<error: {failure.Message}>";
             }
         }
 
@@ -516,7 +553,7 @@ public partial class UpdatumBuild : FalloutBuild
             global::Updatum.Fallout.LinuxAppBundleOptions)
             return JsonSerializer.Serialize(value, value.GetType());
 
-        if (value is global::Fallout.Common.ProjectModel.Solution solution)
+        if (value is Solution solution)
             return solution.Path.ToString();
 
         if (value is Delegate callback)

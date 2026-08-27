@@ -72,7 +72,7 @@ public partial class UpdatumBuild
             if (PublishBundles.HasFlag(PublishBundleTypes.DotNetSingleExecutable) &&
                 !PublishInstallerWithSingleFile)
             {
-                var installerPublishPath = TemporaryDirectory / "installer-publish" / Guid.NewGuid().ToString("N");
+                var installerPublishPath = InstallerPayloadDirectory / Guid.NewGuid().ToString("N");
                 normalPublishPath = installerPublishPath;
                 PublishWindowsInstallerPayload(context, installerPublishPath);
                 installerSourcePath = installerPublishPath;
@@ -114,5 +114,16 @@ public partial class UpdatumBuild
             .SetProperty("BuildVersion", SoftwareVersion)
             .SetProperty("ApplicationName", SoftwareName)
             .SetProperty("OutputName", context.BundleOutputPath.Name));
+    }
+
+    /// <summary>
+    /// Determines whether a project is an installer project.
+    /// </summary>
+    /// <param name="project">The project to inspect.</param>
+    /// <returns><c>true</c> when the project is a WiX project; otherwise, <c>false</c>.</returns>
+    protected virtual bool IsWindowsInstallerProject(Project project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return PublishUtilities.IsWixProject(project.Path);
     }
 }

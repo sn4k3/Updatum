@@ -1,10 +1,10 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Fallout.Common.Tooling;
 
 namespace Updatum.Fallout;
 
 /// <summary>
-/// Represents the build configuration for the Nuke build process, such as Debug or Release.
+/// Represents the build configuration for the Fallout build process, such as Debug or Release.
 /// </summary>
 [TypeConverter(typeof(TypeConverter<BuildConfiguration>))]
 public sealed class BuildConfiguration : Enumeration

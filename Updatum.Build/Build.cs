@@ -1,4 +1,4 @@
-using Fallout.Common.IO;
+﻿using Fallout.Common.IO;
 using Serilog;
 using Updatum.Fallout;
 
@@ -16,7 +16,13 @@ sealed class Build : UpdatumBuild
         ExcludedProjectNameTokens.Remove("fake");
         ExcludedProjectNameTokens.Remove("fakeapp");
 
-        LinuxAppBundleOptions.AppRunScriptBeforeExec = $$"""
+    }
+
+    /// <inheritdoc />
+    protected override LinuxAppBundleOptions CreateLinuxAppBundleOptions()
+    {
+        var options = base.CreateLinuxAppBundleOptions();
+        options.AppRunScriptBeforeExec = $$"""
                                                          function help() {
                                                              echo '         _       _'                   
                                                              echo ' /\ /\ _ __   __| | __ _| |_ _   _ _ __ ___ '
@@ -47,12 +53,9 @@ sealed class Build : UpdatumBuild
                                                          fi
 
                                                          """;
+
+        return options;
     }
-
-    public override AbsolutePath MacOSIconFile => MediaDirectory / $"{SolutionName}.icns";
-
-    public override AbsolutePath LinuxIconFile => MediaDirectory / $"{SolutionName}.svg";
-
     /// <summary>
     /// Gets the FakeApp product name, which differs from the solution name.
     /// </summary>

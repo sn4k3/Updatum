@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.IO.Compression;
 using Fallout.Common.IO;
@@ -37,7 +37,7 @@ public class PublishUtilitiesTests
         string? expectedInstallerPlatform,
         string? expectedAppImageArchitecture)
     {
-        var parsed = PublishUtilities.ParseRuntimeIdentifier(rid);
+        var parsed = PublishRid.ParseRuntimeIdentifier(rid);
 
         Assert.Equal(rid, parsed.RuntimeIdentifier);
         Assert.Equal(expectedFamily, parsed.Family.ToString());
@@ -52,7 +52,7 @@ public class PublishUtilitiesTests
     [Fact]
     public void ParseRuntimeIdentifier_CompoundLinuxRid_PreservesOriginalIdentifier()
     {
-        var parsed = PublishUtilities.ParseRuntimeIdentifier("linux-musl-x64");
+        var parsed = PublishRid.ParseRuntimeIdentifier("linux-musl-x64");
 
         Assert.Equal("linux-musl-x64", parsed.RuntimeIdentifier);
         Assert.Equal(PublishRidFamily.Linux, parsed.Family);
@@ -67,7 +67,7 @@ public class PublishUtilitiesTests
     public void ValidateRuntimeIdentifiers_BlankIdentifier_ThrowsInvalidOperationException()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            PublishUtilities.ValidateRuntimeIdentifiers(["", "win-x64"]));
+            PublishRid.ValidateRuntimeIdentifiers(["", "win-x64"]));
 
         Assert.Contains("blank", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -79,7 +79,7 @@ public class PublishUtilitiesTests
     public void ValidateRuntimeIdentifiers_CaseInsensitiveDuplicate_ThrowsInvalidOperationException()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            PublishUtilities.ValidateRuntimeIdentifiers(["win-x64", "WIN-X64"]));
+            PublishRid.ValidateRuntimeIdentifiers(["win-x64", "WIN-X64"]));
 
         Assert.Contains("WIN-X64", exception.Message, StringComparison.Ordinal);
     }
@@ -95,7 +95,7 @@ public class PublishUtilitiesTests
     public void ParseRuntimeIdentifier_InvalidRid_ThrowsInvalidOperationException(string rid)
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            PublishUtilities.ParseRuntimeIdentifier(rid));
+            PublishRid.ParseRuntimeIdentifier(rid));
 
         Assert.Contains(rid, exception.Message, StringComparison.Ordinal);
     }
@@ -110,7 +110,7 @@ public class PublishUtilitiesTests
     public void ParseRuntimeIdentifier_UnsupportedBundleArchitecture_ThrowsInvalidOperationException(string rid)
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            PublishUtilities.ParseRuntimeIdentifier(rid));
+            PublishRid.ParseRuntimeIdentifier(rid));
 
         Assert.Contains(rid, exception.Message, StringComparison.Ordinal);
     }
@@ -134,7 +134,7 @@ public class PublishUtilitiesTests
                         Old notes.
                         """;
 
-        var releaseNotes = PublishUtilities.ExtractLatestReleaseNotes(changelog);
+        var releaseNotes = ReleaseNotes.ExtractLatestReleaseNotes(changelog);
 
         Assert.Equal("Added publishing.\n\nFixed callbacks.", releaseNotes);
     }
@@ -145,7 +145,7 @@ public class PublishUtilitiesTests
     [Fact]
     public void ExtractLatestReleaseNotes_NoReleaseHeading_ReturnsNull()
     {
-        Assert.Null(PublishUtilities.ExtractLatestReleaseNotes("# Changelog\nNo releases"));
+        Assert.Null(ReleaseNotes.ExtractLatestReleaseNotes("# Changelog\nNo releases"));
     }
 
     /// <summary>
@@ -159,23 +159,6 @@ public class PublishUtilitiesTests
     public void IsWixProject_ProjectPath_UsesOnlyWixProjectExtension(string projectPath, bool expected)
     {
         Assert.Equal(expected, PublishUtilities.IsWixProject(projectPath));
-    }
-
-    /// <summary>
-    /// Verifies that a macOS app bundle suppresses the colliding portable ZIP artifact.
-    /// </summary>
-    [Theory]
-    [InlineData("win-x64", PublishBundleTypes.MacOSAppBundle, true)]
-    [InlineData("osx-x64", (PublishBundleTypes)0, true)]
-    [InlineData("osx-x64", PublishBundleTypes.MacOSAppBundle, false)]
-    public void ShouldCreatePortableZip_MacOSAppBundleSelection_AvoidsArtifactCollision(
-        string rid,
-        PublishBundleTypes bundleTypes,
-        bool expected)
-    {
-        var parsed = PublishUtilities.ParseRuntimeIdentifier(rid);
-
-        Assert.Equal(expected, PublishUtilities.ShouldCreatePortableZip(parsed, bundleTypes));
     }
 
     /// <summary>

@@ -1,16 +1,15 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.InteropServices;
-using System.Security;
-using System.Xml.Linq;
 using Fallout.Common;
 using Fallout.Common.IO;
 using Fallout.Common.Tooling;
 using Fallout.Common.Tools.DotNet;
 using Fallout.Solutions;
+using Serilog;
 using StageKit.Runtime;
 using static Fallout.Common.Tools.DotNet.DotNetTasks;
 
@@ -18,11 +17,6 @@ namespace Updatum.Fallout;
 
 public partial class UpdatumBuild
 {
-    private static readonly HttpClient Client = new()
-    {
-        Timeout = TimeSpan.FromSeconds(30)
-    };
-
     /// <summary>
     /// Gets the bundle types created during publishing.
     /// </summary>
@@ -62,7 +56,7 @@ public partial class UpdatumBuild
     /// Gets the installer projects discovered in the solution.
     /// </summary>
     public virtual IReadOnlyCollection<Project> InstallerProjects =>
-        field ??= Solution.AllProjects.Where(IsInstallerProject).ToArray();
+        field ??= Solution.AllProjects.Where(IsWindowsInstallerProject).ToArray();
 
     /// <summary>
     /// Gets or sets the callback invoked before publishing each runtime identifier.
@@ -115,24 +109,19 @@ public partial class UpdatumBuild
     protected virtual bool IsLinuxHost => OperatingSystem.IsLinux();
 
     /// <summary>
-    /// Gets a value indicating whether FUSE 2 is available on the current Linux host.
+    /// Gets the parent directory for temporary non-single-file bundle payloads.
     /// </summary>
-    protected virtual bool IsFuseAvailable => LinuxSystem.IsFuseAvailable;
+    protected virtual AbsolutePath BundlePayloadDirectory => TemporaryDirectory / "bundle-publish";
 
     /// <summary>
-    /// Gets the current process architecture used to select appimagetool.
+    /// Gets the parent directory for temporary non-single-file installer payloads.
     /// </summary>
-    protected virtual Architecture HostArchitecture => RuntimeInformation.ProcessArchitecture;
+    protected virtual AbsolutePath InstallerPayloadDirectory => TemporaryDirectory / "installer-publish";
 
     /// <summary>
-    /// Gets the persistent appimagetool download and extraction cache directory.
+    /// Gets the parent directory for temporary single-file publish inputs.
     /// </summary>
-    protected virtual AbsolutePath AppImageToolCacheDirectory => TemporaryDirectory / "appimagetool";
-
-    /// <summary>
-    /// Gets the parent directory for isolated AppDir staging directories.
-    /// </summary>
-    protected virtual AbsolutePath AppImageStagingDirectory => PublishStagingDirectory;
+    protected virtual AbsolutePath SingleFileInputsDirectory => TemporaryDirectory / "single-file-publish";
 
     /// <summary>
     /// Creates the default settings for a runtime publish operation.
@@ -142,10 +131,10 @@ public partial class UpdatumBuild
     protected virtual DotNetPublishSettings CreatePublishSettings(PublishRidContext context)
     {
         var settings = new DotNetPublishSettings()
-            .SetProject((string)MainProject.Path)
+            .SetProject(MainProject.Path)
             .SetConfiguration(Configuration)
             .SetRuntime(context.RuntimeIdentifier)
-            .SetOutput((string)context.PublishPath)
+            .SetOutput(context.PublishPath)
             .EnableSelfContained()
             .EnablePublishReadyToRun()
             .SetPublishSingleFile(PublishBundles.HasFlag(PublishBundleTypes.DotNetSingleExecutable))
@@ -163,16 +152,6 @@ public partial class UpdatumBuild
         return settings;
     }
 
-    /// <summary>
-    /// Determines whether a project is an installer project.
-    /// </summary>
-    /// <param name="project">The project to inspect.</param>
-    /// <returns><c>true</c> when the project is a WiX project; otherwise, <c>false</c>.</returns>
-    protected virtual bool IsInstallerProject(Project project)
-    {
-        ArgumentNullException.ThrowIfNull(project);
-        return PublishUtilities.IsWixProject((string)project.Path);
-    }
 
     /// <summary>
     /// Executes a .NET publish command.
@@ -208,9 +187,9 @@ public partial class UpdatumBuild
         {
             if (!executablePath.FileExists())
                 throw new FileNotFoundException($"Published executable '{executablePath}' does not exist.",
-                    (string)executablePath);
+                    executablePath);
 
-            File.SetUnixFileMode((string)executablePath,
+            File.SetUnixFileMode(executablePath,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                 UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
                 UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
@@ -219,7 +198,7 @@ public partial class UpdatumBuild
         if (!PublishBundles.HasFlag(PublishBundleTypes.DotNetSingleExecutable))
         {
             PublishUtilities.WriteRuntimeManifest(context.PublishPath, BuildRuntimeCacheFileName,
-                new BuildRuntime(context.RuntimeIdentifier, SoftwareVersion));
+                new BuildRuntime(context.RuntimeIdentifier, SoftwareVersion, false, ApplicationBundleType.None));
         }
     }
 
@@ -268,7 +247,7 @@ public partial class UpdatumBuild
     /// </summary>
     protected virtual void ExecutePublish()
     {
-        var runtimeIdentifiers = PublishUtilities.ValidateRuntimeIdentifiers(RIds);
+        var runtimeIdentifiers = PublishRid.ValidateRuntimeIdentifiers(RIds);
         var softwareName = PublishUtilities.ValidatePathLeafName(SoftwareName, nameof(SoftwareName));
         var softwareVersion = PublishUtilities.ValidatePathLeafName(SoftwareVersion, nameof(SoftwareVersion));
         _ = PublishUtilities.ValidatePathLeafName(BuildRuntimeCacheFileName, nameof(BuildRuntimeCacheFileName));
@@ -281,14 +260,13 @@ public partial class UpdatumBuild
                 softwareVersion))
             .ToList();
 
-        PublishUtilities.WriteLatestReleaseNotes(ChangelogFile, ReleaseNotesFile);
+        ReleaseNotes.WriteLatestReleaseNotes(ChangelogFile, ReleaseNotesFile);
 
         foreach (var context in contexts)
         {
             RestorePublishRuntimeIdentifier(context.RuntimeIdentifier);
             context.PublishPath.DeleteDirectory();
-            ((AbsolutePath)$"{context.PublishPath}.zip").DeleteFile();
-            GetSingleFileAssetPath(context).DeleteFile();
+            DeleteStaleBundleArtifacts(context);
             PublishRuntime(context);
             CopySingleFileExecutable(context);
         }
@@ -303,50 +281,58 @@ public partial class UpdatumBuild
         }
 
         DeletePublishFilesByExtension(publishDirectory);
+        CleanupPublishTemporaryDirectories();
+    }
+
+    /// <summary>
+    /// Deletes the bundle artifacts left over from a previous publish of the same runtime identifier.
+    /// </summary>
+    /// <param name="context">The runtime publish context.</param>
+    protected virtual void DeleteStaleBundleArtifacts(PublishRidContext context)
+    {
+        ((AbsolutePath)$"{context.BundleOutputPath}.zip").DeleteFile();
+        ((AbsolutePath)$"{context.BundleOutputPath}.AppImage").DeleteFile();
+        GetSingleFileAssetPath(context).DeleteFile();
+    }
+
+    /// <summary>
+    /// Removes the temporary payload roots created while publishing.
+    /// </summary>
+    /// <remarks>
+    /// The appimagetool cache and the shared staging root are intentionally preserved; per-bundle staging
+    /// directories below the staging root are already removed by their own <c>finally</c> blocks.
+    /// </remarks>
+    protected virtual void CleanupPublishTemporaryDirectories()
+    {
+        foreach (var directory in new[]
+                 {
+                     BundlePayloadDirectory, InstallerPayloadDirectory, SingleFileInputsDirectory
+                 })
+        {
+            try
+            {
+                directory.DeleteDirectory();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Log.Debug(exception, "Could not remove the temporary directory {Directory}.", directory);
+            }
+        }
     }
 
     /// <summary>
     /// Deletes files with configured cleanup extensions directly from the publish directory.
     /// </summary>
     /// <param name="publishDirectory">The publish directory to clean.</param>
-    /// <exception cref="ArgumentException"></exception>
-    /// <exception cref="ArgumentNullException"></exception>
-    /// <exception cref="ArgumentOutOfRangeException"></exception>
-    /// <exception cref="DirectoryNotFoundException"></exception>
-    /// <exception cref="IOException"></exception>
-    /// <exception cref="PathTooLongException"></exception>
-    /// <exception cref="SecurityException"></exception>
-    /// <exception cref="UnauthorizedAccessException"></exception>
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="PublishCleanupExtensions"/> contains a blank extension.
+    /// </exception>
     protected virtual void DeletePublishFilesByExtension(AbsolutePath publishDirectory)
     {
         PublishUtilities.DeleteFilesByExtension(
             publishDirectory,
             PublishCleanupExtensions,
             nameof(PublishCleanupExtensions));
-    }
-
-    /// <summary>
-    /// Copies a single-file executable beside the other publish artifacts.
-    /// </summary>
-    /// <param name="context">The successfully published runtime context.</param>
-    protected virtual void CopySingleFileExecutable(PublishRidContext context)
-    {
-        if (!PublishBundles.HasFlag(PublishBundleTypes.DotNetSingleExecutable))
-            return;
-
-        var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
-        var executableName = runtime.Family is PublishRidFamily.Windows
-            ? $"{SoftwareName}.exe"
-            : SoftwareName;
-        var sourcePath = context.PublishPath / executableName;
-        if (!sourcePath.FileExists())
-        {
-            throw new FileNotFoundException(
-                $"Published single-file executable '{sourcePath}' does not exist.",
-                (string)sourcePath);
-        }
-
-        sourcePath.Copy(GetSingleFileAssetPath(context), ExistsPolicy.FileOverwrite);
     }
 
     private PublishRidContext CreatePublishContext(
@@ -367,17 +353,12 @@ public partial class UpdatumBuild
         };
         var assetName = PublishUtilities.ValidatePathLeafName(AssetName(context), nameof(AssetName));
 
-        return context with
-        {
-            PublishPath = PublishUtilities.GetDirectChildPath(publishDirectory, assetName, nameof(AssetName))
-        };
-    }
-
-    private static AbsolutePath GetSingleFileAssetPath(PublishRidContext context)
-    {
-        var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
-        var extension = runtime.Family is PublishRidFamily.Windows ? ".exe" : ".bin";
-        return (AbsolutePath)$"{context.BundleOutputPath}{extension}";
+        return string.Equals(assetName, defaultAssetName, StringComparison.Ordinal)
+            ? context
+            : context with
+            {
+                PublishPath = PublishUtilities.GetDirectChildPath(publishDirectory, assetName, nameof(AssetName))
+            };
     }
 
     /// <summary>
@@ -393,8 +374,8 @@ public partial class UpdatumBuild
             {
                 foreach (var context in bundleContexts)
                 {
-                    var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
-                    if (PublishUtilities.ShouldCreatePortableZip(runtime, PublishBundles) ||
+                    var runtime = PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier);
+                    if (ShouldCreatePortableZip(context.RuntimeIdentifier) ||
                         !IsUnixHost ||
                         PublishMultiArch)
                     {
@@ -405,7 +386,7 @@ public partial class UpdatumBuild
 
             foreach (var context in contexts)
             {
-                var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
+                var runtime = PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier);
 
                 if (PublishBundles.HasFlag(PublishBundleTypes.WindowsInstaller) &&
                     runtime.Family is PublishRidFamily.Windows)
@@ -447,7 +428,7 @@ public partial class UpdatumBuild
         {
             foreach (var context in contexts)
             {
-                var runtime = PublishUtilities.ParseRuntimeIdentifier(context.RuntimeIdentifier);
+                var runtime = PublishRid.ParseRuntimeIdentifier(context.RuntimeIdentifier);
                 var requiresNormalPayload =
                     PublishBundles.HasFlag(PublishBundleTypes.Portable) ||
                     (runtime.Family is PublishRidFamily.MacOS &&
@@ -461,8 +442,7 @@ public partial class UpdatumBuild
                     continue;
                 }
 
-                var outputPath = TemporaryDirectory / "bundle-publish" /
-                                 Guid.NewGuid().ToString("N");
+                var outputPath = BundlePayloadDirectory / Guid.NewGuid().ToString("N");
                 outputPath.CreateOrCleanDirectory();
                 ExecuteDotNetPublish(CreateBundlePublishSettings(context, outputPath));
                 bundleContexts.Add(new PublishRidContext
@@ -494,7 +474,7 @@ public partial class UpdatumBuild
         AbsolutePath outputPath)
     {
         return CreatePublishSettings(context)
-            .SetOutput((string)outputPath)
+            .SetOutput(outputPath)
             .SetPublishSingleFile(false)
             .SetProperty("DebugType", "portable")
             .SetProperty("PublishDocumentationFiles", true)
@@ -508,128 +488,18 @@ public partial class UpdatumBuild
         IReadOnlyCollection<PublishRidContext> originalContexts)
     {
         var originalPaths = originalContexts
-            .Select(context => (string)context.PublishPath)
+            .Select(context => context.PublishPath.ToString())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var context in bundleContexts)
         {
-            if (originalPaths.Contains((string)context.PublishPath))
+            if (originalPaths.Contains(context.PublishPath))
                 continue;
 
             context.PublishPath.DeleteDirectory();
         }
     }
 
-    private SingleFilePublishInputs CreateSingleFilePublishInputs(PublishRidContext context)
-    {
-        var directory = TemporaryDirectory / "single-file-publish" / Guid.NewGuid().ToString("N");
-        directory.CreateDirectory();
-
-        var manifestPath = directory / BuildRuntimeCacheFileName;
-        var targetsPath = directory / "Fallout.SingleFile.targets";
-
-        PublishUtilities.WriteRuntimeManifest(directory, BuildRuntimeCacheFileName,
-            new BuildRuntime(context.RuntimeIdentifier, SoftwareVersion, true,
-                ApplicationBundleType.DotNetSingleFile));
-
-        var document = new XDocument(
-            new XElement("Project",
-                new XElement("ItemGroup",
-                    new XElement("Content",
-                        new XAttribute("Include", "$(FalloutBuildRuntimeManifest)"),
-                        new XAttribute("Link", "$(FalloutBuildRuntimeManifestFileName)"),
-                        new XElement("CopyToPublishDirectory", "PreserveNewest"),
-                        new XElement("ExcludeFromSingleFile", false)))));
-        document.Save((string)targetsPath);
-
-        return new SingleFilePublishInputs(directory, manifestPath, targetsPath);
-    }
-
-    /// <summary>
-    /// Creates a portable ZIP from one published runtime output.
-    /// </summary>
-    /// <param name="context">The runtime publish context.</param>
-    protected virtual void CreatePortableZip(PublishRidContext context)
-    {
-        var stagingPath = PublishStagingDirectory / Guid.NewGuid().ToString("N");
-        var archivePath = (AbsolutePath)$"{context.BundleOutputPath}.zip";
-
-        try
-        {
-            stagingPath.DeleteDirectory();
-            context.PublishPath.Copy(stagingPath, ExistsPolicy.MergeAndOverwrite);
-            PublishUtilities.WriteRuntimeManifest(stagingPath, BuildRuntimeCacheFileName,
-                new BuildRuntime(context.RuntimeIdentifier, SoftwareVersion, false, ApplicationBundleType.None));
-
-            archivePath.DeleteFile();
-            PublishUtilities.CreateZip(stagingPath, archivePath);
-        }
-        finally
-        {
-            stagingPath.DeleteDirectory();
-        }
-    }
 
 
-    /// <summary>
-    /// Deletes a file-system entry regardless of whether it is a regular file or directory.
-    /// </summary>
-    /// <param name="path">The file-system entry path.</param>
-    protected virtual void DeleteFileSystemEntry(AbsolutePath path)
-    {
-        path.DeleteFile();
-        path.DeleteDirectory();
-    }
-
-    /// <summary>
-    /// Composes the shell command that extracts one downloaded appimagetool AppImage.
-    /// </summary>
-    /// <param name="downloadedPath">The downloaded AppImage path.</param>
-    /// <returns>The shell-safe extraction command.</returns>
-    protected virtual string CreateAppImageToolExtractionCommand(AbsolutePath downloadedPath)
-    {
-        return $"{AppBundleUtilities.QuoteShell(downloadedPath)} --appimage-extract";
-    }
-
-
-    /// <summary>
-    /// Downloads a file to a protected local path.
-    /// </summary>
-    /// <param name="url">The source URL.</param>
-    /// <param name="destination">The destination file path.</param>
-    protected virtual void DownloadFile(string url, AbsolutePath destination)
-    {
-        using var response = Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
-            .GetAwaiter().GetResult();
-        response.EnsureSuccessStatusCode();
-        using var source = response.Content.ReadAsStream();
-        using var target = File.Create((string)destination);
-        source.CopyTo(target);
-    }
-
-    /// <summary>
-    /// Executes a shell command in the specified working directory.
-    /// </summary>
-    /// <param name="command">The shell command.</param>
-    /// <param name="workingDirectory">The command working directory.</param>
-    protected virtual void ExecuteShell(string command, AbsolutePath workingDirectory)
-    {
-        ProcessTasks.StartShell(command, (string)workingDirectory)
-            .AssertWaitForExit();
-    }
-
-    private sealed class SingleFilePublishInputs(
-        AbsolutePath directory,
-        AbsolutePath manifestPath,
-        AbsolutePath targetsPath)
-    {
-        internal string ManifestPath { get; } = (string)manifestPath;
-
-        internal string TargetsPath { get; } = (string)targetsPath;
-
-        internal void Delete()
-        {
-            directory.DeleteDirectory();
-        }
-    }
 }

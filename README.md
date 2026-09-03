@@ -6,6 +6,16 @@
 [![Nuget](https://img.shields.io/nuget/v/Updatum?style=for-the-badge)](https://www.nuget.org/packages/Updatum)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/sn4k3?color=red&style=for-the-badge)](https://github.com/sponsors/sn4k3)
 
+> [!WARNING]
+> **Updatum is deprecated and no longer maintained.**
+>
+> This project has been superseded by **[StageKit.Updatum](https://github.com/sn4k3/StageKit/tree/main/src/StageKit.Updatum)**.
+> Also consider using **[StageKit.Fallout](https://github.com/sn4k3/StageKit/tree/main/src/StageKit.Fallout)** to build and packing your application for multiple platforms.
+>
+> Existing releases will remain available for compatibility, but no further updates or bug fixes are planned.
+>
+> Please migrate to **StageKit.Updatum** for future development.
+
 Updatum is a lightweight and easy-to-integrate C# library designed to automate your application updates using **GitHub Releases**.  
 It simplifies the update process by checking for new versions, retrieving release notes, and optionally downloading and launching installers or executables.  
 Whether you're building a desktop tool or a larger application, Updatum helps you ensure your users are always on the latest version — effortlessly.
